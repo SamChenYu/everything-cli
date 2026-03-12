@@ -124,6 +124,14 @@ export class TelegramService {
     });
   }
 
+  async sendMessage(chatId: string, text: string): Promise<void> {
+    if (!this.client) {
+      throw new Error("Client not connected");
+    }
+
+    await this.client.sendMessage(chatId, { message: text });
+  }
+
   async disconnect(): Promise<void> {
     if (this.client) {
       await this.client.disconnect();

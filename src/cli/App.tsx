@@ -13,6 +13,8 @@ export default function App() {
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [telegram, setTelegram] = useState<TelegramService | null>(null);
+  const [input, setInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
   const { exit } = useApp();
 
   useEffect(() => {
@@ -87,6 +89,23 @@ export default function App() {
           loadMessages(chat);
         }
       }
+    } else if (stage === "viewing_messages") {
+      if (char === "b" && !key.ctrl && !key.meta && input.length === 0) {
+        // Go back to chat selection (only if input is empty)
+        setSelectedChat(null);
+        setMessages([]);
+        setInput("");
+        setStage("selecting_chat");
+      } else if (key.return && input.trim() !== "") {
+        // Send message
+        sendMessage(input);
+      } else if (key.backspace || key.delete) {
+        // Remove last character
+        setInput((prev) => prev.slice(0, -1));
+      } else if (!key.ctrl && !key.meta && !key.escape) {
+        // Append normal character
+        setInput((prev) => prev + char);
+      }
     }
   });
 
@@ -105,6 +124,28 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStage("error");
+    }
+  };
+
+  const sendMessage = async (text: string) => {
+    if (!telegram || !selectedChat || isSending) {
+      return;
+    }
+
+    setIsSending(true);
+
+    try {
+      await telegram.sendMessage(selectedChat.id, text);
+      setInput("");
+
+      // Reload messages to show the sent message
+      const msgs = await telegram.getMessages(selectedChat.id, 10);
+      setMessages(msgs.reverse());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStage("error");
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -178,7 +219,13 @@ export default function App() {
           </Box>
         ))}
         <Text> </Text>
-        <Text color="gray">Press Ctrl+C to exit</Text>
+        <Box borderStyle="single" borderColor="cyan" paddingX={1}>
+          <Text>
+            {isSending ? "Sending..." : `> ${input}`}
+          </Text>
+        </Box>
+        <Text> </Text>
+        <Text color="gray">Type to compose, Enter to send, 'b' (when empty) to go back, Ctrl+C to exit</Text>
       </Box>
     );
   }
