@@ -19,15 +19,28 @@ export default function App() {
     const init = async () => {
       try {
         const apiId = process.env.TELEGRAM_API_ID;
+        const apiHash = process.env.TELEGRAM_API_HASH;
         const stringSession = process.env.TELEGRAM_STRING_SESSION;
 
-        if (!apiId || !stringSession) {
-          setError("Missing TELEGRAM_API_ID or TELEGRAM_STRING_SESSION in .env file");
+        if (!apiId) {
+          setError("Missing TELEGRAM_API_ID in .env file");
           setStage("error");
           return;
         }
 
-        const tg = new TelegramService(apiId, stringSession);
+        if (!apiHash) {
+          setError("Missing TELEGRAM_API_HASH in .env file");
+          setStage("error");
+          return;
+        }
+
+        if (!stringSession) {
+          setError("Missing TELEGRAM_STRING_SESSION in .env file");
+          setStage("error");
+          return;
+        }
+
+        const tg = new TelegramService(apiId, apiHash, stringSession);
         setTelegram(tg);
 
         await tg.connect();

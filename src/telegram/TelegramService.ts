@@ -19,20 +19,42 @@ export interface Message {
 export class TelegramService {
   private client: TelegramClient | null = null;
   private apiId: number;
+  private apiHash: string;
   private stringSession: string;
 
-  constructor(apiId: string, stringSession: string) {
-    this.apiId = parseInt(apiId);
-    this.stringSession = stringSession;
+  constructor(apiId: string, apiHash: string, stringSession: string) {
+    const parsedId = parseInt(apiId);
+    if (isNaN(parsedId)) {
+      throw new Error(`Invalid TELEGRAM_API_ID: "${apiId}"`);
+    }
+
+    if (!apiHash || apiHash.trim() === "") {
+      throw new Error("TELEGRAM_API_HASH is required");
+    }
+
+    if (!stringSession || stringSession.trim() === "") {
+      throw new Error("TELEGRAM_STRING_SESSION is required and cannot be empty");
+    }
+
+    this.apiId = parsedId;
+    this.apiHash = apiHash.trim();
+    this.stringSession = stringSession.trim();
   }
 
   async connect(): Promise<void> {
-    const session = new StringSession(this.stringSession);
-    this.client = new TelegramClient(session, this.apiId, "", {
-      connectionRetries: 5,
-    });
+    try {
+      const session = new StringSession(this.stringSession);
+      this.client = new TelegramClient(session, this.apiId, this.apiHash, {
+        connectionRetries: 5,
+      });
 
-    await this.client.connect();
+      await this.client.connect();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Failed to connect to Telegram: ${error.message}`);
+      }
+      throw error;
+    }
   }
 
   async getRecentChats(limit: number = 5): Promise<Chat[]> {
