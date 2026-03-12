@@ -90,15 +90,17 @@ export default function App() {
         }
       }
     } else if (stage === "viewing_messages") {
-      if (char === "b" && !key.ctrl && !key.meta && input.length === 0) {
-        // Go back to chat selection (only if input is empty)
-        setSelectedChat(null);
-        setMessages([]);
-        setInput("");
-        setStage("selecting_chat");
-      } else if (key.return && input.trim() !== "") {
-        // Send message
-        sendMessage(input);
+      if (key.return) {
+        if (input.trim() === ":q") {
+          // Go back to chat selection
+          setSelectedChat(null);
+          setMessages([]);
+          setInput("");
+          setStage("selecting_chat");
+        } else if (input.trim() !== "") {
+          // Send message
+          sendMessage(input);
+        }
       } else if (key.backspace || key.delete) {
         // Remove last character
         setInput((prev) => prev.slice(0, -1));
@@ -152,7 +154,7 @@ export default function App() {
   if (stage === "connecting") {
     return (
       <Box flexDirection="column">
-        <Text color="cyan">Connecting to Telegram...</Text>
+        <Text color="green">Connecting to Telegram...</Text>
       </Box>
     );
   }
@@ -160,7 +162,7 @@ export default function App() {
   if (stage === "loading_chats") {
     return (
       <Box flexDirection="column">
-        <Text color="cyan">Loading recent chats...</Text>
+        <Text color="green">Loading recent chats...</Text>
       </Box>
     );
   }
@@ -169,7 +171,7 @@ export default function App() {
     return (
       <Box flexDirection="column">
         <Text color="red">Error: {error}</Text>
-        <Text color="gray">Press Ctrl+C to exit</Text>
+        <Text color="green">Press Ctrl+C to exit</Text>
       </Box>
     );
   }
@@ -183,14 +185,14 @@ export default function App() {
         <Text> </Text>
         {chats.map((chat, index) => (
           <Box key={chat.id}>
-            <Text color={index === selectedChatIndex ? "cyan" : "white"}>
+            <Text color="green" bold={index === selectedChatIndex}>
               {index === selectedChatIndex ? "> " : "  "}
               {index + 1}. {chat.title} ({chat.type})
             </Text>
           </Box>
         ))}
         <Text> </Text>
-        <Text color="gray">Press Enter to select, Ctrl+C to exit</Text>
+        <Text color="green">Press Enter to select, Ctrl+C to exit</Text>
       </Box>
     );
   }
@@ -198,7 +200,7 @@ export default function App() {
   if (stage === "loading_messages") {
     return (
       <Box flexDirection="column">
-        <Text color="cyan">Loading messages from {selectedChat?.title}...</Text>
+        <Text color="green">Loading messages from {selectedChat?.title}...</Text>
       </Box>
     );
   }
@@ -212,20 +214,20 @@ export default function App() {
         <Text> </Text>
         {messages.map((msg) => (
           <Box key={msg.id} flexDirection="column" marginBottom={1}>
-            <Text color="yellow">
+            <Text color="green">
               [{msg.date.toLocaleString()}] {msg.senderName}:
             </Text>
-            <Text>{msg.text}</Text>
+            <Text color="green">{msg.text}</Text>
           </Box>
         ))}
         <Text> </Text>
-        <Box borderStyle="single" borderColor="cyan" paddingX={1}>
-          <Text>
+        <Box borderStyle="single" borderColor="green" paddingX={1}>
+          <Text color="green">
             {isSending ? "Sending..." : `> ${input}`}
           </Text>
         </Box>
         <Text> </Text>
-        <Text color="gray">Type to compose, Enter to send, 'b' (when empty) to go back, Ctrl+C to exit</Text>
+        <Text color="green">Type to compose, Enter to send, ':q' + Enter to go back, Ctrl+C to exit</Text>
       </Box>
     );
   }
