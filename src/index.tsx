@@ -1,0 +1,5 @@
+import React from "react";
+import { render } from "ink";
+import App from "./cli/App.js";
+
+render(<App />);
