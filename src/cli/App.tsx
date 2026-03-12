@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text, useInput, useApp } from "ink";
-import { TelegramService, Chat, Message } from "../telegram/TelegramService.js";
+import { TelegramService } from "../telegram/TelegramService.js";
+import type { Chat, Message } from "../telegram/TelegramService.js";
 
 type Stage = "connecting" | "loading_chats" | "selecting_chat" | "loading_messages" | "viewing_messages" | "error";
 
@@ -62,11 +63,15 @@ export default function App() {
       } else if (key.downArrow) {
         setSelectedChatIndex((prev) => Math.min(chats.length - 1, prev + 1));
       } else if (key.return) {
-        loadMessages(chats[selectedChatIndex]);
+        const chat = chats[selectedChatIndex];
+        if (chat) {
+          loadMessages(chat);
+        }
       } else if (char >= "1" && char <= "5") {
         const index = parseInt(char) - 1;
-        if (index < chats.length) {
-          loadMessages(chats[index]);
+        const chat = chats[index];
+        if (chat) {
+          loadMessages(chat);
         }
       }
     }

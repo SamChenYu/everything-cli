@@ -12,8 +12,8 @@ export interface Message {
   id: number;
   text: string;
   date: Date;
-  senderId?: string;
-  senderName?: string;
+  senderId: string | undefined;
+  senderName: string;
 }
 
 export class TelegramService {
