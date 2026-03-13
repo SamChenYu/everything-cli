@@ -17,7 +17,7 @@ if not api_key:
     raise ValueError("GEMINI_API_KEY not found in .env file")
 
 client = genai.Client(api_key=api_key)
-MODEL_ID='gemini-2.5-flash' # gemini-3-flash-preview
+MODEL_ID='gemini-2.5-flash-lite' # gemini-3-flash-preview
 
 LONG_PROMPT = """
         # Role: CLI Technical Architect (In-Depth Mode)
@@ -47,6 +47,7 @@ system_instruction = LONG_PROMPT if is_long else SHORT_PROMPT
 chat = client.chats.create(
     model=MODEL_ID,
     config=types.GenerateContentConfig(
+        #thinking_config=types.ThinkingConfig(thinking_level="low"),
         system_instruction=system_instruction,
         temperature=0.7,
     )
