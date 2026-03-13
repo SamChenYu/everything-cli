@@ -43,10 +43,12 @@ while True:
 
         if not user_input:
             continue
-
-
-
-        response = model.generate_content(user_input)
+        
+        CONVERSATION += "\nUser:\n"
+        CONVERSATION += user_input
+        response = model.generate_content(CONVERSATION)
+        CONVERSATION += "\nGEMINI:\n"
+        CONVERSATION += response.text
         print(f"\nGemini: {response.text}")
 
     except KeyboardInterrupt:
