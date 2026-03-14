@@ -61,6 +61,7 @@ export default function App() {
 
     return () => {
       if (telegram) {
+        telegram.unsubscribeFromNewMessages();
         telegram.disconnect();
       }
     };
@@ -93,6 +94,7 @@ export default function App() {
       if (key.return) {
         if (input.trim() === ":q") {
           // Go back to chat selection
+          telegram?.unsubscribeFromNewMessages();
           setSelectedChat(null);
           setMessages([]);
           setInput("");
@@ -123,6 +125,10 @@ export default function App() {
       const msgs = await telegram.getMessages(chat.id, 10);
       setMessages(msgs.reverse());
       setStage("viewing_messages");
+
+      telegram.subscribeToNewMessages(chat.id, (newMsg) => {
+        setMessages((prev) => [...prev, newMsg]);
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStage("error");

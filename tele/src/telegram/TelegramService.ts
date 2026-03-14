@@ -1,6 +1,7 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 import { Api } from "telegram";
+import { NewMessage, NewMessageEvent } from "telegram/events/index.js";
 
 export interface Chat {
   id: string;
@@ -21,6 +22,8 @@ export class TelegramService {
   private apiId: number;
   private apiHash: string;
   private stringSession: string;
+  private currentEventHandler: ((event: NewMessageEvent) => void) | null = null;
+  private currentEventBuilder: NewMessage | null = null;
 
   constructor(apiId: string, apiHash: string, stringSession: string) {
     const parsedId = parseInt(apiId);
@@ -130,6 +133,49 @@ export class TelegramService {
     }
 
     await this.client.sendMessage(chatId, { message: text });
+  }
+
+  subscribeToNewMessages(chatId: string, callback: (msg: Message) => void): void {
+    if (!this.client) return;
+
+    this.unsubscribeFromNewMessages();
+
+    const eventBuilder = new NewMessage({ chats: [chatId], incoming: true });
+
+    const handler = (event: NewMessageEvent): void => {
+      const msg = event.message;
+      let senderName = "Unknown";
+
+      if (msg.sender && msg.sender instanceof Api.User) {
+        senderName = msg.sender.firstName || "";
+        if (msg.sender.lastName) {
+          senderName += ` ${msg.sender.lastName}`;
+        }
+        if (!senderName.trim()) {
+          senderName = `User ${msg.sender.id}`;
+        }
+      }
+
+      callback({
+        id: msg.id,
+        text: msg.text || "(no text)",
+        date: new Date(msg.date * 1000),
+        senderId: msg.senderId?.toString(),
+        senderName,
+      });
+    };
+
+    this.currentEventHandler = handler;
+    this.currentEventBuilder = eventBuilder;
+    this.client.addEventHandler(handler, eventBuilder);
+  }
+
+  unsubscribeFromNewMessages(): void {
+    if (this.client && this.currentEventHandler && this.currentEventBuilder) {
+      this.client.removeEventHandler(this.currentEventHandler, this.currentEventBuilder);
+    }
+    this.currentEventHandler = null;
+    this.currentEventBuilder = null;
   }
 
   async disconnect(): Promise<void> {
