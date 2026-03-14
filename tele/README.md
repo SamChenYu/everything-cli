@@ -1,28 +1,5 @@
-\# Stealth Apps
+# Tele CLI
 
-* ChatGPT / Gemini
-* WhatsApp Messenger
-* Telegram Messenger
-
-
-
-npx tsx index.tsx
-
-
-
-Libraries:
-
-ink
-
-react
-
-playwright or puppeteermy o
-
-commander
-
-chalk
-
-eventemitter3
-
-nodemon
-
+Setup:
+- Obtain API_ID and API_HASH from `https://core.telegram.org/`
+- run `npm run generate-session`, enter phone number and confirm OTP to get STRING_SESSION into .env
