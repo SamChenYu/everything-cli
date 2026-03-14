@@ -213,11 +213,10 @@ export default function App() {
         </Text>
         <Text> </Text>
         {messages.map((msg) => (
-          <Box key={msg.id} flexDirection="column" marginBottom={1}>
+          <Box key={msg.id} flexDirection="column" marginBottom={0}>
             <Text color="green">
-              [{msg.date.toLocaleString()}] {msg.senderName}:
+              [{msg.date.toLocaleString()}] {msg.senderName}: {msg.text}
             </Text>
-            <Text color="green">{msg.text}</Text>
           </Box>
         ))}
         <Text> </Text>
