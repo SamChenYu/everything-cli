@@ -136,7 +136,9 @@ export class TelegramService {
   }
 
   subscribeToNewMessages(chatId: string, callback: (msg: Message) => void): void {
-    if (!this.client) return;
+    if (!this.client) {
+      throw new Error("Client not connected");
+    }
 
     this.unsubscribeFromNewMessages();
 
