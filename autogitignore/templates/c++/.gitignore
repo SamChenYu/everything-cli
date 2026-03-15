@@ -1,0 +1,46 @@
+
+# Compiled object files
+*.o
+*.obj
+
+# Compiled static libraries
+*.a
+*.lib
+
+# Compiled dynamic libraries
+*.so
+*.so.*
+*.dylib
+*.dll
+
+# Executables
+*.exe
+*.out
+*.app
+main
+
+# Debugging / profiling files
+*.dSYM/
+*.stackdump
+gmon.out
+
+# Build directories
+/build/
+/bin/
+/lib/
+
+# IDE / editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Generated dependency files
+*.d
+
+.DS_Store
+
+/output/
+
+.env
