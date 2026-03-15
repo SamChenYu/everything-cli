@@ -144,17 +144,31 @@ export class TelegramService {
 
     const eventBuilder = new NewMessage({ chats: [chatId] });
 
-    const handler = (event: NewMessageEvent): void => {
+    const handler = async (event: NewMessageEvent): Promise<void> => {
       const msg = event.message;
       let senderName = "Unknown";
 
-      if (msg.sender && msg.sender instanceof Api.User) {
-        senderName = msg.sender.firstName || "";
-        if (msg.sender.lastName) {
-          senderName += ` ${msg.sender.lastName}`;
+      try {
+        const sender = await msg.getSender();
+        if (sender && sender instanceof Api.User) {
+          senderName = sender.firstName || "";
+          if (sender.lastName) {
+            senderName += ` ${sender.lastName}`;
+          }
+          if (!senderName.trim()) {
+            senderName = `User ${sender.id}`;
+          }
         }
-        if (!senderName.trim()) {
-          senderName = `User ${msg.sender.id}`;
+      } catch (e) {
+        // If we can't get the sender, fall back to Unknown
+        if (msg.sender && msg.sender instanceof Api.User) {
+          senderName = msg.sender.firstName || "";
+          if (msg.sender.lastName) {
+            senderName += ` ${msg.sender.lastName}`;
+          }
+          if (!senderName.trim()) {
+            senderName = `User ${msg.sender.id}`;
+          }
         }
       }
 
