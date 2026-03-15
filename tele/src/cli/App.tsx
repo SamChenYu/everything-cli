@@ -146,12 +146,9 @@ export default function App() {
     setIsSending(true);
 
     try {
-      await telegram.sendMessage(selectedChat.id, text);
+      const sentMessage = await telegram.sendMessage(selectedChat.id, text);
+      setMessages((prev) => [...prev, sentMessage]);
       setInput("");
-
-      // Reload messages to show the sent message
-      const msgs = await telegram.getMessages(selectedChat.id, 10);
-      setMessages(msgs.reverse());
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStage("error");

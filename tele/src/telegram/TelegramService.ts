@@ -127,12 +127,32 @@ export class TelegramService {
     });
   }
 
-  async sendMessage(chatId: string, text: string): Promise<void> {
+  async sendMessage(chatId: string, text: string): Promise<Message> {
     if (!this.client) {
       throw new Error("Client not connected");
     }
 
-    await this.client.sendMessage(chatId, { message: text });
+    const result = await this.client.sendMessage(chatId, { message: text });
+    const msg = result as Api.Message;
+
+    let senderName = "You";
+    if (msg.sender && msg.sender instanceof Api.User) {
+      senderName = msg.sender.firstName || "";
+      if (msg.sender.lastName) {
+        senderName += ` ${msg.sender.lastName}`;
+      }
+      if (!senderName.trim()) {
+        senderName = "You";
+      }
+    }
+
+    return {
+      id: msg.id,
+      text: msg.text || text,
+      date: new Date(msg.date * 1000),
+      senderId: msg.senderId?.toString(),
+      senderName,
+    };
   }
 
   subscribeToNewMessages(chatId: string, callback: (msg: Message) => void): void {
@@ -142,19 +162,33 @@ export class TelegramService {
 
     this.unsubscribeFromNewMessages();
 
-    const eventBuilder = new NewMessage({ chats: [chatId], incoming: true });
+    const eventBuilder = new NewMessage({ chats: [chatId] });
 
-    const handler = (event: NewMessageEvent): void => {
+    const handler = async (event: NewMessageEvent): Promise<void> => {
       const msg = event.message;
       let senderName = "Unknown";
 
-      if (msg.sender && msg.sender instanceof Api.User) {
-        senderName = msg.sender.firstName || "";
-        if (msg.sender.lastName) {
-          senderName += ` ${msg.sender.lastName}`;
+      try {
+        const sender = await msg.getSender();
+        if (sender && sender instanceof Api.User) {
+          senderName = sender.firstName || "";
+          if (sender.lastName) {
+            senderName += ` ${sender.lastName}`;
+          }
+          if (!senderName.trim()) {
+            senderName = `User ${sender.id}`;
+          }
         }
-        if (!senderName.trim()) {
-          senderName = `User ${msg.sender.id}`;
+      } catch (e) {
+        // If we can't get the sender, fall back to Unknown
+        if (msg.sender && msg.sender instanceof Api.User) {
+          senderName = msg.sender.firstName || "";
+          if (msg.sender.lastName) {
+            senderName += ` ${msg.sender.lastName}`;
+          }
+          if (!senderName.trim()) {
+            senderName = `User ${msg.sender.id}`;
+          }
         }
       }
 
