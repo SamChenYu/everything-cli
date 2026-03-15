@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Box, Text, useInput, useApp } from "ink";
 import { TelegramService } from "../telegram/TelegramService.js";
 import type { Chat, Message } from "../telegram/TelegramService.js";
@@ -13,6 +13,7 @@ export default function App() {
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [telegram, setTelegram] = useState<TelegramService | null>(null);
+  const telegramRef = useRef<TelegramService | null>(null);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const { exit } = useApp();
@@ -44,6 +45,7 @@ export default function App() {
 
         const tg = new TelegramService(apiId, apiHash, stringSession);
         setTelegram(tg);
+        telegramRef.current = tg;
 
         await tg.connect();
         setStage("loading_chats");
@@ -60,8 +62,10 @@ export default function App() {
     init();
 
     return () => {
-      if (telegram) {
-        telegram.disconnect();
+      const currentTelegram = telegramRef.current;
+      if (currentTelegram) {
+        currentTelegram.unsubscribeFromNewMessages();
+        currentTelegram.disconnect();
       }
     };
   }, []);
@@ -93,6 +97,7 @@ export default function App() {
       if (key.return) {
         if (input.trim() === ":q") {
           // Go back to chat selection
+          telegram?.unsubscribeFromNewMessages();
           setSelectedChat(null);
           setMessages([]);
           setInput("");
@@ -123,6 +128,10 @@ export default function App() {
       const msgs = await telegram.getMessages(chat.id, 10);
       setMessages(msgs.reverse());
       setStage("viewing_messages");
+
+      telegram.subscribeToNewMessages(chat.id, (newMsg) => {
+        setMessages((prev) => [...prev, newMsg]);
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStage("error");
