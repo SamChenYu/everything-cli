@@ -75,6 +75,7 @@ export default function App() {
         const index = parseInt(char) - 1;
         const chat = chats[index];
         if (chat) {
+          setSelectedChatIndex(index);
           loadMessages(index, chat);
         }
       }

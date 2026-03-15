@@ -19,7 +19,7 @@ export interface Message {
 const SESSION_PATH = path.join(process.cwd(), ".whatsapp-session");
 
 /**
- * Parses a WhatsApp message timestamp string (e.g. "12:34 PM", "Yesterday", "Mon")
+ * Parses a WhatsApp message timestamp string in "HH:MM" or "HH:MM AM/PM" format
  * into a Date. Returns today's date with the parsed time when a time string is
  * recognisable; otherwise falls back to the current time.
  */
@@ -65,10 +65,12 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    // Check if already logged in (chat list visible)
-    const loggedIn = await this.page
-      .locator('[data-testid="chat-list"]')
-      .waitFor({ timeout: 5000 })
+    const chatListLocator = this.page.locator('[data-testid="chat-list"]');
+    const qrLocator = this.page.locator('[data-testid="qrcode"]');
+
+    // First, give the chat list a reasonably long time to appear (already logged-in case)
+    const loggedIn = await chatListLocator
+      .waitFor({ timeout: 15000 })
       .then(() => true)
       .catch(() => false);
 
@@ -76,10 +78,18 @@ export class WhatsAppService {
       return;
     }
 
-    // Not logged in — QR code scan required
-    onQRRequired();
+    // If chat list didn't appear, only treat this as "QR required" if the QR/login UI is visible
+    const qrVisible = await qrLocator
+      .waitFor({ timeout: 15000 })
+      .then(() => true)
+      .catch(() => false);
 
-    await this.page.locator('[data-testid="chat-list"]').waitFor({ timeout: 120000 });
+    if (qrVisible) {
+      // Not logged in — QR code scan required
+      onQRRequired();
+    }
+
+    await chatListLocator.waitFor({ timeout: 120000 });
 
     // Save session for next time
     await this.context!.storageState({ path: SESSION_PATH });
@@ -131,20 +141,23 @@ export class WhatsAppService {
   }
 
   async getMessages(limit: number = 10): Promise<Message[]> {
+    if (limit <= 0) {
+      return [];
+    }
     if (!this.page) {
       throw new Error("Browser not launched");
     }
 
     await this.page.locator('[data-testid="conversation-panel-messages"]').waitFor({ timeout: 15000 });
 
-    const msgRows = await this.page.locator('[data-testid="msg-container"]').all();
+    const msgRows = this.page.locator('[data-testid="msg-container"]');
     const messages: Message[] = [];
 
-    const subset = msgRows.slice(-limit);
+    const totalCount = await msgRows.count();
+    const startIndex = Math.max(0, totalCount - limit);
 
-    for (let i = 0; i < subset.length; i++) {
-      const row = subset[i];
-      if (!row) continue;
+    for (let i = startIndex; i < totalCount; i++) {
+      const row = msgRows.nth(i);
 
       const isFromMe = await row.evaluate((el) =>
         el.classList.contains("message-out") || el.querySelector(".message-out") !== null
@@ -161,7 +174,7 @@ export class WhatsAppService {
       const senderName = await senderEl.textContent().catch(() => isFromMe ? "Me" : "Them");
 
       messages.push({
-        id: String(i),
+        id: String(i - startIndex),
         text: (text ?? "(media)").trim(),
         date: parseMessageTime(timeStr ?? ""),
         senderName: (senderName ?? (isFromMe ? "Me" : "Them")).trim() || (isFromMe ? "Me" : "Them"),
