@@ -57,6 +57,11 @@ export default function App() {
     }
 
     if (stage === "selecting_chat") {
+      // If there are no chats, ignore navigation and selection input.
+      if (chats.length === 0) {
+        return;
+      }
+
       if (key.upArrow) {
         setSelectedChatIndex((prev) => Math.max(0, prev - 1));
       } else if (key.downArrow) {

@@ -150,14 +150,14 @@ export class WhatsAppService {
         el.classList.contains("message-out") || el.querySelector(".message-out") !== null
       );
 
-      const textEl = row.locator('[data-testid="msg-container"] .selectable-text span, .copyable-text span').first();
+      const textEl = row.locator('.selectable-text span, .copyable-text span').first();
       const text = await textEl.textContent().catch(() => "(media)");
 
       const timeEl = row.locator('[data-testid="msg-meta"] span').first();
       const timeStr = await timeEl.textContent().catch(() => "");
 
       // Sender name (only shown in group chats)
-      const senderEl = row.locator('[data-testid="msg-container"] .e1gr2w1z span').first();
+      const senderEl = row.locator('.e1gr2w1z span').first();
       const senderName = await senderEl.textContent().catch(() => isFromMe ? "Me" : "Them");
 
       messages.push({
