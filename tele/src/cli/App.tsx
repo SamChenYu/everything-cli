@@ -146,9 +146,9 @@ export default function App() {
     setIsSending(true);
 
     try {
-      await telegram.sendMessage(selectedChat.id, text);
+      const sentMessage = await telegram.sendMessage(selectedChat.id, text);
+      setMessages((prev) => [...prev, sentMessage]);
       setInput("");
-      // The sent message will be added via the event subscription
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStage("error");

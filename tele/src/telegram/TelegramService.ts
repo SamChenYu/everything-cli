@@ -127,12 +127,32 @@ export class TelegramService {
     });
   }
 
-  async sendMessage(chatId: string, text: string): Promise<void> {
+  async sendMessage(chatId: string, text: string): Promise<Message> {
     if (!this.client) {
       throw new Error("Client not connected");
     }
 
-    await this.client.sendMessage(chatId, { message: text });
+    const result = await this.client.sendMessage(chatId, { message: text });
+    const msg = result as Api.Message;
+
+    let senderName = "You";
+    if (msg.sender && msg.sender instanceof Api.User) {
+      senderName = msg.sender.firstName || "";
+      if (msg.sender.lastName) {
+        senderName += ` ${msg.sender.lastName}`;
+      }
+      if (!senderName.trim()) {
+        senderName = "You";
+      }
+    }
+
+    return {
+      id: msg.id,
+      text: msg.text || text,
+      date: new Date(msg.date * 1000),
+      senderId: msg.senderId?.toString(),
+      senderName,
+    };
   }
 
   subscribeToNewMessages(chatId: string, callback: (msg: Message) => void): void {
