@@ -142,7 +142,7 @@ export class TelegramService {
 
     this.unsubscribeFromNewMessages();
 
-    const eventBuilder = new NewMessage({ chats: [chatId], incoming: true });
+    const eventBuilder = new NewMessage({ chats: [chatId] });
 
     const handler = (event: NewMessageEvent): void => {
       const msg = event.message;
