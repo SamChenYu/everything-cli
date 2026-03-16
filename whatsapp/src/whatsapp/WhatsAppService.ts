@@ -29,35 +29,50 @@ function getSelector(envKey: string, fallback: string): string {
 const SELECTORS = {
   CHAT_LIST: () => getSelector("WA_CHAT_LIST_SELECTOR", '[aria-label="Chat list"]'),
   CHAT_ROW: () => getSelector("WA_CHAT_ROW_SELECTOR", 'div[role="row"]'),
-  MESSAGE_ROW: () => getSelector("WA_MESSAGE_ROW_SELECTOR", 'div[role="row"]'),
+  MESSAGE_CONTAINER: () => getSelector("WA_MESSAGE_CONTAINER_SELECTOR", '[data-pre-plain-text]'),
+  MESSAGE_META_ATTR: () => getSelector("WA_MESSAGE_META_ATTR", 'data-pre-plain-text'),
   MESSAGE_TEXT: () => getSelector("WA_MESSAGE_TEXT_SELECTOR", 'span[data-testid="selectable-text"]'),
-  MESSAGE_TIME: () => getSelector("WA_MESSAGE_TIME_SELECTOR", 'span.x1c4vz4f.x2lah0s'),
-  SENDER_NAME: () => getSelector("WA_SENDER_NAME_SELECTOR", '._ahxt'),
-  CONVERSATION_PANEL: () => getSelector("WA_CONVERSATION_PANEL_SELECTOR", '[data-testid="conversation-panel-messages"]'),
+  MESSAGE_OUTGOING: () => getSelector("WA_MESSAGE_OUTGOING_SELECTOR", '.message-out'),
+  MESSAGE_OUTGOING_DATA_ATTR: () => getSelector("WA_MESSAGE_OUTGOING_DATA_ATTR", 'data-id'),
+  MESSAGE_OUTGOING_DATA_PREFIX: () => getSelector("WA_MESSAGE_OUTGOING_DATA_PREFIX", 'true_'),
   QR_CODE: () => getSelector("WA_QR_CODE_SELECTOR", '[data-testid="qrcode"]'),
   INPUT_BOX: () => getSelector("WA_INPUT_BOX_SELECTOR", '[data-testid="conversation-compose-box-input"]'),
 };
 
 /**
- * Parses a WhatsApp message timestamp string in "HH:MM" or "HH:MM AM/PM" format
- * into a Date. Returns today's date with the parsed time when a time string is
- * recognisable; otherwise falls back to the current time.
+ * Parses the data-pre-plain-text attribute from a WhatsApp message element.
+ * Format: "[2:04 pm, 16/03/2026] SenderName: "
  */
-function parseMessageTime(timeStr: string): Date {
-  const now = new Date();
-  // Match "HH:MM" or "HH:MM AM/PM"
-  const match = timeStr.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
-  if (match) {
-    let hours = parseInt(match[1] ?? "0", 10);
-    const minutes = parseInt(match[2] ?? "0", 10);
-    const meridiem = (match[3] ?? "").toUpperCase();
+function parsePrePlainText(attr: string): { date: Date; senderName: string } {
+  const match = attr.match(/\[(.+?),\s*(.+?)\]\s*(.+?):\s*$/);
+  if (!match) {
+    return { date: new Date(), senderName: "" };
+  }
+
+  const timeStr = match[1]!;
+  const dateStr = match[2]!;
+  const senderName = match[3]!.trim();
+
+  const date = new Date();
+
+  const dateParts = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (dateParts) {
+    date.setFullYear(parseInt(dateParts[3]!, 10));
+    date.setMonth(parseInt(dateParts[2]!, 10) - 1);
+    date.setDate(parseInt(dateParts[1]!, 10));
+  }
+
+  const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})(?:\s*(am|pm))?/i);
+  if (timeMatch) {
+    let hours = parseInt(timeMatch[1]!, 10);
+    const minutes = parseInt(timeMatch[2]!, 10);
+    const meridiem = (timeMatch[3] ?? "").toUpperCase();
     if (meridiem === "PM" && hours !== 12) hours += 12;
     if (meridiem === "AM" && hours === 12) hours = 0;
-    const date = new Date(now);
     date.setHours(hours, minutes, 0, 0);
-    return date;
   }
-  return now;
+
+  return { date, senderName };
 }
 
 export class WhatsAppService {
@@ -188,7 +203,7 @@ export class WhatsAppService {
     }
 
     await item.click();
-    await this.page.locator(SELECTORS.CONVERSATION_PANEL()).waitFor({ timeout: 15000 });
+    await this.page.locator(SELECTORS.MESSAGE_CONTAINER()).first().waitFor({ timeout: 15000 });
   }
 
   async getMessages(limit: number = 10): Promise<Message[]> {
@@ -199,37 +214,38 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    await this.page.locator(SELECTORS.CONVERSATION_PANEL()).waitFor({ timeout: 15000 });
+    await this.page.locator(SELECTORS.MESSAGE_CONTAINER()).first().waitFor({ timeout: 15000 });
 
-    const msgRows = this.page.locator(SELECTORS.MESSAGE_ROW()).filter({ has: this.page.locator(`${SELECTORS.MESSAGE_ROW()} div[data-id]`) });
+    const msgEls = this.page.locator(SELECTORS.MESSAGE_CONTAINER());
+
     const messages: Message[] = [];
 
-    const totalCount = await msgRows.count();
+    const totalCount = await msgEls.count();
     const startIndex = Math.max(0, totalCount - limit);
 
     for (let i = startIndex; i < totalCount; i++) {
-      const row = msgRows.nth(i);
+      const el = msgEls.nth(i);
 
-      const isFromMe = await row.evaluate((el) =>
-        el.classList.contains("message-out") || el.querySelector(".message-out") !== null
-      );
+      const prePlainText = await el.getAttribute(SELECTORS.MESSAGE_META_ATTR()) ?? "";
+      const { date, senderName } = parsePrePlainText(prePlainText);
 
-      const textEl = row.locator(SELECTORS.MESSAGE_TEXT()).first();
-      const text = await textEl.textContent().catch(() => "(media)");
+      const textEl = el.locator(SELECTORS.MESSAGE_TEXT()).first();
+      const text = await textEl.textContent({ timeout: 1000 }).catch(() => "(media)");
 
-      // Extract time from the visible timestamp
-      const timeEl = row.locator(SELECTORS.MESSAGE_TIME()).last();
-      const timeStr = await timeEl.textContent().catch(() => "");
-
-      // Sender name (shown for incoming messages in group chats)
-      const senderEl = row.locator(SELECTORS.SENDER_NAME()).first();
-      const senderName = await senderEl.textContent().catch(() => isFromMe ? "Me" : "Them");
+      const outgoingSelector = SELECTORS.MESSAGE_OUTGOING();
+      const outgoingDataAttr = SELECTORS.MESSAGE_OUTGOING_DATA_ATTR();
+      const outgoingPrefix = SELECTORS.MESSAGE_OUTGOING_DATA_PREFIX();
+      const isFromMe = await el.evaluate((node, { sel, attr, prefix }) => {
+        if (node.closest(sel)) return true;
+        const dataEl = node.closest(`[${attr}]`);
+        return dataEl?.getAttribute(attr)?.startsWith(prefix) ?? false;
+      }, { sel: outgoingSelector, attr: outgoingDataAttr, prefix: outgoingPrefix });
 
       messages.push({
         id: String(i - startIndex),
         text: (text ?? "(media)").trim(),
-        date: parseMessageTime(timeStr ?? ""),
-        senderName: (senderName ?? (isFromMe ? "Me" : "Them")).trim() || (isFromMe ? "Me" : "Them"),
+        date,
+        senderName: senderName || (isFromMe ? "Me" : "Them"),
         isFromMe,
       });
     }
