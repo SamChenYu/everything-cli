@@ -19,6 +19,26 @@ export interface Message {
 const SESSION_PATH = path.join(process.cwd(), ".whatsapp-session");
 
 /**
+ * Helper function to get selector from environment variable with fallback
+ */
+function getSelector(envKey: string, fallback: string): string {
+  return process.env[envKey] || fallback;
+}
+
+// WhatsApp Web Selectors - configurable via .env
+const SELECTORS = {
+  CHAT_LIST: () => getSelector("WA_CHAT_LIST_SELECTOR", '[aria-label="Chat list"]'),
+  CHAT_ROW: () => getSelector("WA_CHAT_ROW_SELECTOR", 'div[role="row"]'),
+  MESSAGE_ROW: () => getSelector("WA_MESSAGE_ROW_SELECTOR", 'div[role="row"]'),
+  MESSAGE_TEXT: () => getSelector("WA_MESSAGE_TEXT_SELECTOR", 'span[data-testid="selectable-text"]'),
+  MESSAGE_TIME: () => getSelector("WA_MESSAGE_TIME_SELECTOR", 'span.x1c4vz4f.x2lah0s'),
+  SENDER_NAME: () => getSelector("WA_SENDER_NAME_SELECTOR", '._ahxt'),
+  CONVERSATION_PANEL: () => getSelector("WA_CONVERSATION_PANEL_SELECTOR", '[data-testid="conversation-panel-messages"]'),
+  QR_CODE: () => getSelector("WA_QR_CODE_SELECTOR", '[data-testid="qrcode"]'),
+  INPUT_BOX: () => getSelector("WA_INPUT_BOX_SELECTOR", '[data-testid="conversation-compose-box-input"]'),
+};
+
+/**
  * Parses a WhatsApp message timestamp string in "HH:MM" or "HH:MM AM/PM" format
  * into a Date. Returns today's date with the parsed time when a time string is
  * recognisable; otherwise falls back to the current time.
@@ -46,7 +66,13 @@ export class WhatsAppService {
   private page: Page | null = null;
 
   async launch(): Promise<void> {
-    this.browser = await chromium.launch({ headless: false });
+    this.browser = await chromium.launch({
+      headless: false,
+      args: [
+        '--disable-blink-features=AutomationControlled',
+        '--no-sandbox',
+      ]
+    });
 
     const storageStateExists = fs.existsSync(SESSION_PATH);
 
@@ -54,9 +80,20 @@ export class WhatsAppService {
       ...(storageStateExists ? { storageState: SESSION_PATH } : {}),
       userAgent:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      viewport: { width: 1280, height: 720 },
+      locale: 'en-US',
+      timezoneId: 'America/New_York',
     });
 
     this.page = await this.context.newPage();
+
+    // Remove webdriver property to avoid detection
+    await this.page.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => false,
+      });
+    });
+
     await this.page.goto("https://web.whatsapp.com", { waitUntil: "domcontentloaded" });
   }
 
@@ -65,8 +102,8 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    const chatListLocator = this.page.locator('[data-testid="chat-list"]');
-    const qrLocator = this.page.locator('[data-testid="qrcode"]');
+    const chatListLocator = this.page.locator(SELECTORS.CHAT_LIST());
+    const qrLocator = this.page.locator(SELECTORS.QR_CODE());
 
     // First, give the chat list a reasonably long time to appear (already logged-in case)
     const loggedIn = await chatListLocator
@@ -91,6 +128,9 @@ export class WhatsAppService {
 
     await chatListLocator.waitFor({ timeout: 120000 });
 
+    // Wait a bit for WhatsApp to fully initialize before saving session
+    await this.page.waitForTimeout(2000);
+
     // Save session for next time
     await this.context!.storageState({ path: SESSION_PATH });
   }
@@ -100,25 +140,36 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    await this.page.locator('[data-testid="chat-list"]').waitFor({ timeout: 30000 });
+    await this.page.locator(SELECTORS.CHAT_LIST()).waitFor({ timeout: 30000 });
 
-    const chatItems = await this.page.locator('[data-testid="cell-frame-container"]').all();
+    const chatItems = await this.page.locator(`${SELECTORS.CHAT_LIST()} > ${SELECTORS.CHAT_ROW()}`).all();
     const chats: Chat[] = [];
 
     for (let i = 0; i < Math.min(limit, chatItems.length); i++) {
       const item = chatItems[i];
       if (!item) continue;
 
-      const titleEl = item.locator('[data-testid="cell-frame-title"]');
-      const lastMsgEl = item.locator('[data-testid="last-msg-status"] + span, .x1iyjqo2 span').first();
+      // Get chat title from the span with title attribute
+      const titleSpans = item.locator('span[title]');
+      const titleCount = await titleSpans.count();
 
-      const title = (await titleEl.textContent()) ?? `Chat ${i + 1}`;
-      const lastMessage = await lastMsgEl.textContent().catch(() => "");
+      let title = `Chat ${i + 1}`;
+      let lastMessage = "";
+
+      if (titleCount > 0) {
+        // First span[title] is usually the chat name
+        title = (await titleSpans.first().getAttribute('title')) ?? `Chat ${i + 1}`;
+
+        // Second span[title] is usually the last message
+        if (titleCount > 1) {
+          lastMessage = (await titleSpans.nth(1).getAttribute('title')) ?? "";
+        }
+      }
 
       chats.push({
         id: String(i),
         title: title.trim(),
-        lastMessage: (lastMessage ?? "").trim(),
+        lastMessage: lastMessage.trim(),
       });
     }
 
@@ -130,14 +181,14 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    const chatItems = await this.page.locator('[data-testid="cell-frame-container"]').all();
+    const chatItems = await this.page.locator(`${SELECTORS.CHAT_LIST()} > ${SELECTORS.CHAT_ROW()}`).all();
     const item = chatItems[chatIndex];
     if (!item) {
       throw new Error(`Chat at index ${chatIndex} not found`);
     }
 
     await item.click();
-    await this.page.locator('[data-testid="conversation-panel-messages"]').waitFor({ timeout: 15000 });
+    await this.page.locator(SELECTORS.CONVERSATION_PANEL()).waitFor({ timeout: 15000 });
   }
 
   async getMessages(limit: number = 10): Promise<Message[]> {
@@ -148,9 +199,9 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    await this.page.locator('[data-testid="conversation-panel-messages"]').waitFor({ timeout: 15000 });
+    await this.page.locator(SELECTORS.CONVERSATION_PANEL()).waitFor({ timeout: 15000 });
 
-    const msgRows = this.page.locator('[data-testid="msg-container"]');
+    const msgRows = this.page.locator(SELECTORS.MESSAGE_ROW()).filter({ has: this.page.locator(`${SELECTORS.MESSAGE_ROW()} div[data-id]`) });
     const messages: Message[] = [];
 
     const totalCount = await msgRows.count();
@@ -163,14 +214,15 @@ export class WhatsAppService {
         el.classList.contains("message-out") || el.querySelector(".message-out") !== null
       );
 
-      const textEl = row.locator('.selectable-text span, .copyable-text span').first();
+      const textEl = row.locator(SELECTORS.MESSAGE_TEXT()).first();
       const text = await textEl.textContent().catch(() => "(media)");
 
-      const timeEl = row.locator('[data-testid="msg-meta"] span').first();
+      // Extract time from the visible timestamp
+      const timeEl = row.locator(SELECTORS.MESSAGE_TIME()).last();
       const timeStr = await timeEl.textContent().catch(() => "");
 
-      // Sender name (only shown in group chats)
-      const senderEl = row.locator('.e1gr2w1z span').first();
+      // Sender name (shown for incoming messages in group chats)
+      const senderEl = row.locator(SELECTORS.SENDER_NAME()).first();
       const senderName = await senderEl.textContent().catch(() => isFromMe ? "Me" : "Them");
 
       messages.push({
@@ -190,7 +242,7 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    const inputBox = this.page.locator('[data-testid="conversation-compose-box-input"]');
+    const inputBox = this.page.locator(SELECTORS.INPUT_BOX());
     await inputBox.click();
     await inputBox.fill(text);
     await this.page.keyboard.press("Enter");

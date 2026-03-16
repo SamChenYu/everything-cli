@@ -181,7 +181,6 @@ export default function App() {
             <Text color="green" bold={index === selectedChatIndex}>
               {index === selectedChatIndex ? "> " : "  "}
               {index + 1}. {chat.title}
-              {chat.lastMessage ? ` — ${chat.lastMessage}` : ""}
             </Text>
           </Box>
         ))}

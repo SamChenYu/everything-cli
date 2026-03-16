@@ -25,3 +25,6 @@ After a successful login the session is saved to `.whatsapp-session` so you won'
 - **Enter** — open selected chat / send composed message
 - **`:q` + Enter** — go back to chat list
 - **Ctrl+C** — exit
+
+
+Since this does DOM reading, the classes may be updated from Meta and so you'll have to find the divs and id etc and update them in the .env
