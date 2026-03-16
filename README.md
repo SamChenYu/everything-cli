@@ -1,8 +1,9 @@
 # everything-cli
 ```
-├── whatsapp/ 	# CLI for WhatsApp using Playwright + DOM reading 
-├── tele/ 		# CLI for Telegram using GramJS 
-└── gemini/ 	# CLI for Gemini chat
+├── autogitignore/        # Instant .gitignore setup
+├── gemini/		          # Basic CLI wrapper for Gemini chat
+├── tele/		          # CLI for Telegram using GramJS 
+└── whatsapp/		      # CLI for Whatsapp using Playwright + DOM reading
 ```
 
 
