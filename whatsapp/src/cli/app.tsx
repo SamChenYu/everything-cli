@@ -34,7 +34,7 @@ export default function App() {
         });
 
         setStage("loading_chats");
-        const recentChats = await whatsapp.getRecentChats(5);
+        const recentChats = await whatsapp.getRecentChats(10);
         setChats(recentChats);
         setStage("selecting_chat");
       } catch (err) {
@@ -71,8 +71,8 @@ export default function App() {
         if (chat) {
           loadMessages(selectedChatIndex, chat);
         }
-      } else if (char >= "1" && char <= "5") {
-        const index = parseInt(char) - 1;
+      } else if (char >= "0" && char <= "9") {
+        const index = char === "0" ? 9 : parseInt(char) - 1;
         const chat = chats[index];
         if (chat) {
           setSelectedChatIndex(index);
@@ -205,7 +205,7 @@ export default function App() {
     return (
       <Box flexDirection="column">
         <Text color="green" bold>
-          Select a chat (use arrow keys or press 1-5):
+          Select a chat (use arrow keys or press 1-9, 0 for 10):
         </Text>
         <Text> </Text>
         {chats.map((chat, index) => (

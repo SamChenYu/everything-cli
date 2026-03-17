@@ -17,27 +17,45 @@ export interface Message {
 
 const SESSION_DIR = path.join(process.cwd(), ".whatsapp-chrome-data");
 
-/**
- * Helper function to get selector from environment variable with fallback
- */
-function getSelector(envKey: string, fallback: string): string {
-  return process.env[envKey] || fallback;
+const REQUIRED_ENV_KEYS = [
+  "WA_CHAT_LIST_SELECTOR",
+  "WA_CHAT_ROW_SELECTOR",
+  "WA_MESSAGE_WRAPPER_SELECTOR",
+  "WA_MESSAGE_META_SELECTOR",
+  "WA_MESSAGE_META_ATTR",
+  "WA_MESSAGE_TEXT_SELECTOR",
+  "WA_MESSAGE_OUTGOING_PREFIX",
+  "WA_QR_CODE_SELECTOR",
+  "WA_INPUT_BOX_SELECTOR",
+  "WA_SEND_BUTTON_SELECTOR",
+] as const;
+
+function loadSelectors() {
+  const missing = REQUIRED_ENV_KEYS.filter((key) => !process.env[key]);
+  if (missing.length > 0) {
+    console.error("Missing required WhatsApp selector environment variables:");
+    for (const key of missing) {
+      console.error(`  - ${key}`);
+    }
+    console.error("\nCopy .env.sample to .env and fill in all selector values.");
+    process.exit(1);
+  }
+
+  return {
+    CHAT_LIST: process.env.WA_CHAT_LIST_SELECTOR!,
+    CHAT_ROW: process.env.WA_CHAT_ROW_SELECTOR!,
+    MESSAGE_WRAPPER: process.env.WA_MESSAGE_WRAPPER_SELECTOR!,
+    MESSAGE_META: process.env.WA_MESSAGE_META_SELECTOR!,
+    MESSAGE_META_ATTR: process.env.WA_MESSAGE_META_ATTR!,
+    MESSAGE_TEXT: process.env.WA_MESSAGE_TEXT_SELECTOR!,
+    OUTGOING_PREFIX: process.env.WA_MESSAGE_OUTGOING_PREFIX!,
+    QR_CODE: process.env.WA_QR_CODE_SELECTOR!,
+    INPUT_BOX: process.env.WA_INPUT_BOX_SELECTOR!,
+    SEND_BUTTON: process.env.WA_SEND_BUTTON_SELECTOR!,
+  };
 }
 
-// WhatsApp Web Selectors - configurable via .env
-const SELECTORS = {
-  CHAT_LIST: () => getSelector("WA_CHAT_LIST_SELECTOR", '[aria-label="Chat list"]'),
-  CHAT_ROW: () => getSelector("WA_CHAT_ROW_SELECTOR", 'div[role="row"]'),
-  MESSAGE_CONTAINER: () => getSelector("WA_MESSAGE_CONTAINER_SELECTOR", '[data-pre-plain-text]'),
-  MESSAGE_META_ATTR: () => getSelector("WA_MESSAGE_META_ATTR", 'data-pre-plain-text'),
-  MESSAGE_TEXT: () => getSelector("WA_MESSAGE_TEXT_SELECTOR", 'span[data-testid="selectable-text"]'),
-  MESSAGE_OUTGOING: () => getSelector("WA_MESSAGE_OUTGOING_SELECTOR", '.message-out'),
-  MESSAGE_OUTGOING_DATA_ATTR: () => getSelector("WA_MESSAGE_OUTGOING_DATA_ATTR", 'data-id'),
-  MESSAGE_OUTGOING_DATA_PREFIX: () => getSelector("WA_MESSAGE_OUTGOING_DATA_PREFIX", 'true_'),
-  QR_CODE: () => getSelector("WA_QR_CODE_SELECTOR", '[data-testid="qrcode"]'),
-  INPUT_BOX: () => getSelector("WA_INPUT_BOX_SELECTOR", 'div[role="textbox"][data-lexical-editor="true"][aria-placeholder="Type a message"]'),
-  SEND_BUTTON: () => getSelector("WA_SEND_BUTTON_SELECTOR", '[aria-label="Send"]'),
-};
+const SELECTORS = loadSelectors();
 
 /**
  * Parses the data-pre-plain-text attribute from a WhatsApp message element.
@@ -109,8 +127,8 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    const chatListLocator = this.page.locator(SELECTORS.CHAT_LIST());
-    const qrLocator = this.page.locator(SELECTORS.QR_CODE());
+    const chatListLocator = this.page.locator(SELECTORS.CHAT_LIST);
+    const qrLocator = this.page.locator(SELECTORS.QR_CODE);
 
     // First, give the chat list a reasonably long time to appear (already logged-in case)
     const loggedIn = await chatListLocator
@@ -141,9 +159,9 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    await this.page.locator(SELECTORS.CHAT_LIST()).waitFor({ timeout: 30000 });
+    await this.page.locator(SELECTORS.CHAT_LIST).waitFor({ timeout: 30000 });
 
-    const chatItems = await this.page.locator(`${SELECTORS.CHAT_LIST()} > ${SELECTORS.CHAT_ROW()}`).all();
+    const chatItems = await this.page.locator(`${SELECTORS.CHAT_LIST} > ${SELECTORS.CHAT_ROW}`).all();
     const chats: Chat[] = [];
 
     for (let i = 0; i < Math.min(limit, chatItems.length); i++) {
@@ -182,18 +200,18 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    const msgLocator = this.page.locator(SELECTORS.MESSAGE_CONTAINER());
-    const hadMessages = (await msgLocator.count()) > 0;
+    const wrapperLocator = this.page.locator(SELECTORS.MESSAGE_WRAPPER);
+    const hadMessages = (await wrapperLocator.count()) > 0;
 
-    let oldFirstAttr: string | null = null;
+    let oldFirstId: string | null = null;
     if (hadMessages) {
-      oldFirstAttr = await msgLocator
+      oldFirstId = await wrapperLocator
         .first()
-        .getAttribute(SELECTORS.MESSAGE_META_ATTR())
+        .getAttribute("data-id")
         .catch(() => null);
     }
 
-    const chatItems = await this.page.locator(`${SELECTORS.CHAT_LIST()} > ${SELECTORS.CHAT_ROW()}`).all();
+    const chatItems = await this.page.locator(`${SELECTORS.CHAT_LIST} > ${SELECTORS.CHAT_ROW}`).all();
     const item = chatItems[chatIndex];
     if (!item) {
       throw new Error(`Chat at index ${chatIndex} not found`);
@@ -201,20 +219,19 @@ export class WhatsAppService {
 
     await item.click();
 
-    if (hadMessages && oldFirstAttr) {
-      const sel = SELECTORS.MESSAGE_CONTAINER();
-      const attr = SELECTORS.MESSAGE_META_ATTR();
+    if (hadMessages && oldFirstId) {
+      const sel = SELECTORS.MESSAGE_WRAPPER;
       await this.page.waitForFunction(
-        ({ sel, attr, old }) => {
+        ({ sel, oldId }) => {
           const el = document.querySelector(sel);
-          return !el || el.getAttribute(attr) !== old;
+          return !el || el.getAttribute("data-id") !== oldId;
         },
-        { sel, attr, old: oldFirstAttr },
+        { sel, oldId: oldFirstId },
         { timeout: 10000 },
       ).catch(() => {});
     }
 
-    await msgLocator.first().waitFor({ timeout: 15000 });
+    await wrapperLocator.first().waitFor({ timeout: 15000 });
   }
 
   async getMessages(limit: number = 10): Promise<Message[]> {
@@ -225,36 +242,53 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    await this.page.locator(SELECTORS.MESSAGE_CONTAINER()).first().waitFor({ timeout: 15000 });
+    await this.page.locator(SELECTORS.MESSAGE_WRAPPER).first().waitFor({ timeout: 15000 });
 
-    const msgEls = this.page.locator(SELECTORS.MESSAGE_CONTAINER());
-
+    const wrapperEls = this.page.locator(SELECTORS.MESSAGE_WRAPPER);
     const messages: Message[] = [];
 
-    const totalCount = await msgEls.count();
+    const totalCount = await wrapperEls.count();
     const startIndex = Math.max(0, totalCount - limit);
 
     for (let i = startIndex; i < totalCount; i++) {
-      const el = msgEls.nth(i);
+      const wrapper = wrapperEls.nth(i);
 
-      const prePlainText = await el.getAttribute(SELECTORS.MESSAGE_META_ATTR()) ?? "";
-      const { date, senderName } = parsePrePlainText(prePlainText);
+      const dataId = await wrapper.getAttribute("data-id") ?? "";
+      const isFromMe = dataId.startsWith(SELECTORS.OUTGOING_PREFIX);
 
-      const textEl = el.locator(SELECTORS.MESSAGE_TEXT()).first();
-      const text = await textEl.textContent({ timeout: 1000 }).catch(() => "(media)");
+      const metaEl = wrapper.locator(SELECTORS.MESSAGE_META).first();
+      const hasMeta = (await metaEl.count()) > 0;
 
-      const outgoingSelector = SELECTORS.MESSAGE_OUTGOING();
-      const outgoingDataAttr = SELECTORS.MESSAGE_OUTGOING_DATA_ATTR();
-      const outgoingPrefix = SELECTORS.MESSAGE_OUTGOING_DATA_PREFIX();
-      const isFromMe = await el.evaluate((node, { sel, attr, prefix }) => {
-        if (node.closest(sel)) return true;
-        const dataEl = node.closest(`[${attr}]`);
-        return dataEl?.getAttribute(attr)?.startsWith(prefix) ?? false;
-      }, { sel: outgoingSelector, attr: outgoingDataAttr, prefix: outgoingPrefix });
+      let date = new Date();
+      let senderName = "";
+
+      if (hasMeta) {
+        const prePlainText = await metaEl.getAttribute(SELECTORS.MESSAGE_META_ATTR) ?? "";
+        const parsed = parsePrePlainText(prePlainText);
+        date = parsed.date;
+        senderName = parsed.senderName;
+      }
+
+      const textEl = wrapper.locator(SELECTORS.MESSAGE_TEXT).first();
+      const text = await textEl.textContent({ timeout: 1000 }).catch(() => null);
+
+      const mediaLabel = text === null
+        ? await wrapper.evaluate((node) => {
+            const labels = Array.from(node.querySelectorAll("[aria-label]"))
+              .map((e) => (e.getAttribute("aria-label") ?? "").toLowerCase());
+            if (labels.some((l) => l.includes("picture") || l.includes("photo") || l.includes("image"))) return "<image>";
+            if (labels.some((l) => l.includes("video"))) return "<video>";
+            if (labels.some((l) => l.includes("audio") || l.includes("voice") || l.includes("ptt"))) return "<audio>";
+            if (labels.some((l) => l.includes("gif"))) return "<gif>";
+            if (labels.some((l) => l.includes("sticker"))) return "<sticker>";
+            if (labels.some((l) => l.includes("document"))) return "<document>";
+            return "<media>";
+          })
+        : null;
 
       messages.push({
         id: String(i - startIndex),
-        text: (text ?? "(media)").trim(),
+        text: (text ?? mediaLabel ?? "<media>").trim(),
         date,
         senderName: senderName || (isFromMe ? "Me" : "Them"),
         isFromMe,
@@ -269,13 +303,13 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    const inputBox = this.page.locator(SELECTORS.INPUT_BOX());
+    const inputBox = this.page.locator(SELECTORS.INPUT_BOX);
     await inputBox.click();
     await inputBox.pressSequentially(text, { delay: 30 });
 
     await this.page.waitForTimeout(300);
 
-    const sendBtn = this.page.locator(SELECTORS.SEND_BUTTON());
+    const sendBtn = this.page.locator(SELECTORS.SEND_BUTTON);
     if (await sendBtn.isVisible().catch(() => false)) {
       await sendBtn.click();
     } else {
