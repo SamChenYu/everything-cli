@@ -1,5 +1,14 @@
 repos:
 
+# Verify setup (runs first)
+- repo: local
+  hooks:
+    - id: verify-setup
+      name: Verify secret scanning tools are installed
+      entry: bash -c 'command -v detect-secrets > /dev/null || (echo "ERROR detect-secrets not found. Run ./setup.sh first!" && exit 1)'
+      language: system
+      pass_filenames: false
+
 # Basic safety hooks
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.6.0
@@ -15,10 +24,14 @@ repos:
     - id: detect-secrets
       args: ["--baseline", ".secrets.baseline"]
 
-# Block committing real .env files
+# Block committing real .env files (but allow .env.sample)
 - repo: local
   hooks:
     - id: forbid-env-files
-      name: Prevent committing real .env
-      entry: bash -c 'git diff --cached --name-only | grep -E "(^|/)\.env$" && echo "❌ Do not commit .env files" && exit 1 || exit 0'
+      name: Prevent committing .env files (except .env.sample)
+      entry: bash -c 'git diff --cached --name-only | grep -E "\.env" | grep -v "\.env\.sample$" && echo "ERROR Do not commit .env files (only .env.sample is allowed)" && exit 1 || exit 0'
+      language: system
+    - id: forbid-credentials
+      name: Prevent committing credential files
+      entry: bash -c 'git diff --cached --name-only | grep -E "\.(key|pem|p12|pfx|keystore|jks)$|credentials|service-account|secrets\.(json|yaml|yml)$" | grep -v "\.sample$" && echo "ERROR Do not commit credential or key files" && exit 1 || exit 0'
       language: system

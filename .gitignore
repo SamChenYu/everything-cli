@@ -1,1 +1,31 @@
+# OS files
 .DS_Store
+
+# Environment files (allow .env.sample)
+.env
+.env.*
+!.env.sample
+
+# Credentials and secrets
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+*.jks
+*credentials*.json
+*service-account*.json
+secrets.json
+secrets.yaml
+secrets.yml
+
+# Python virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Session files
+*.session
+.whatsapp-session
+.telegram-session

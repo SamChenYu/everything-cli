@@ -6,4 +6,8 @@
 └── whatsapp/		      # CLI for Whatsapp using Playwright + DOM reading
 ```
 
-`pip install -r requirements.txt` to activate pre commit hooks for secrets scanning (needs to be done globally)
+## Secrets scanning setup
+```bash
+./setup.sh
+./verify-setup.sh
+```
