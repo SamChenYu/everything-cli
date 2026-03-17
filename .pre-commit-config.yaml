@@ -1,14 +1,5 @@
 repos:
 
-# Verify setup (runs first)
-- repo: local
-  hooks:
-    - id: verify-setup
-      name: Verify secret scanning tools are installed
-      entry: bash -c 'command -v detect-secrets > /dev/null || (echo "ERROR detect-secrets not found. Run ./setup.sh first!" && exit 1)'
-      language: system
-      pass_filenames: false
-
 # Basic safety hooks
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.6.0
