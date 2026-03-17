@@ -3,6 +3,11 @@ import { Box, Text, useInput, useApp } from "ink";
 import { WhatsAppService } from "../whatsapp/WhatsAppService.js";
 import type { Chat, Message } from "../whatsapp/WhatsAppService.js";
 
+const VISIBLE_CHATS = 10;
+const RECENT_CHATS_LIMIT = 25;
+const MESSAGE_LIMIT = 10;
+const POLL_INTERVAL_MS = 1_000;
+
 type Stage =
   | "launching"
   | "waiting_for_qr"
@@ -18,7 +23,6 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedChatIndex, setSelectedChatIndex] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
-  const VISIBLE_CHATS = 10;
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [whatsapp] = useState<WhatsAppService>(() => new WhatsAppService());
@@ -36,7 +40,7 @@ export default function App() {
         });
 
         setStage("loading_chats");
-        const recentChats = await whatsapp.getRecentChats(25);
+        const recentChats = await whatsapp.getRecentChats(RECENT_CHATS_LIMIT);
         setChats(recentChats);
         setStage("selecting_chat");
       } catch (err) {
@@ -108,7 +112,7 @@ export default function App() {
     if (isPollingRef.current) return;
     isPollingRef.current = true;
     try {
-      const msgs = await whatsapp.getMessages(10);
+      const msgs = await whatsapp.getMessages(MESSAGE_LIMIT);
       setMessages(msgs);
     } catch {
       // Silently ignore polling errors to avoid disrupting the UI
@@ -119,7 +123,7 @@ export default function App() {
 
   const startPolling = useCallback(() => {
     stopPolling();
-    pollingRef.current = setInterval(pollMessages, 1000);
+    pollingRef.current = setInterval(pollMessages, POLL_INTERVAL_MS);
   }, [pollMessages]);
 
   const stopPolling = useCallback(() => {
@@ -137,7 +141,7 @@ export default function App() {
 
     try {
       await whatsapp.openChat(chatIndex);
-      const msgs = await whatsapp.getMessages(10);
+      const msgs = await whatsapp.getMessages(MESSAGE_LIMIT);
       setMessages(msgs);
       setStage("viewing_messages");
       startPolling();
@@ -154,7 +158,7 @@ export default function App() {
     try {
       await whatsapp.sendMessage(text);
       setInput("");
-      const msgs = await whatsapp.getMessages(10);
+      const msgs = await whatsapp.getMessages(MESSAGE_LIMIT);
       setMessages(msgs);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

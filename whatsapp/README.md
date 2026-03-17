@@ -1,12 +1,13 @@
 # WhatsApp CLI
 
-A terminal-based WhatsApp chat client that uses Playwright to automate [WhatsApp Web](https://web.whatsapp.com) in a Chromium browser.
+A terminal-based WhatsApp chat client that uses Playwright to read the  Whatsapp Web DOM in a Chromium browser. Built with Ink / React.
 
 ## Setup
 
 ```bash
 npm install
 npx playwright install chromium
+cp .env.sample .env
 ```
 
 ## Running
@@ -17,14 +18,15 @@ npm start
 
 On first run, a Chromium window will open and prompt you to scan the QR code with your phone (Settings → Linked Devices → Link a Device).
 
-After a successful login the session is saved to `.whatsapp-session` so you won't need to scan the QR code again on subsequent runs.
+After a successful login the session is persisted in `.whatsapp-chrome-data/` so you won't need to scan the QR code again on subsequent runs.
 
 ## Usage
 
-- **Arrow keys / 1-5** — select a chat
+- **↑ / ↓** — navigate the chat list
 - **Enter** — open selected chat / send composed message
 - **`:q` + Enter** — go back to chat list
 - **Ctrl+C** — exit
 
+## Selectors
 
-Since this does DOM reading, the classes may be updated from Meta and so you'll have to find the divs and id etc and update them in the .env
+WhatsApp Web uses obfuscated CSS class names that change on every deploy. All DOM selectors used by this tool are configured via environment variables in `.env` (see `.env.sample` for defaults and descriptions). If the app stops working after a WhatsApp update, inspect the page and update the selector values in your `.env`.

@@ -17,6 +17,19 @@ export interface Message {
 
 const SESSION_DIR = path.join(process.cwd(), ".whatsapp-chrome-data");
 
+const TIMEOUTS = {
+  CHAT_LIST_INITIAL: 15_000,
+  QR_CODE_APPEAR: 15_000,
+  QR_LOGIN_COMPLETE: 120_000,
+  CHAT_LIST_LOAD: 30_000,
+  CHAT_PANEL_REFRESH: 10_000,
+  MESSAGE_LOAD: 15_000,
+  TEXT_CONTENT: 1_000,
+  POST_TYPE_SETTLE: 300,
+} as const;
+
+const TYPE_DELAY_MS = 30;
+
 const REQUIRED_ENV_KEYS = [
   "WA_CHAT_LIST_SELECTOR",
   "WA_CHAT_ROW_SELECTOR",
@@ -132,7 +145,7 @@ export class WhatsAppService {
 
     // First, give the chat list a reasonably long time to appear (already logged-in case)
     const loggedIn = await chatListLocator
-      .waitFor({ timeout: 15000 })
+      .waitFor({ timeout: TIMEOUTS.CHAT_LIST_INITIAL })
       .then(() => true)
       .catch(() => false);
 
@@ -142,7 +155,7 @@ export class WhatsAppService {
 
     // If chat list didn't appear, only treat this as "QR required" if the QR/login UI is visible
     const qrVisible = await qrLocator
-      .waitFor({ timeout: 15000 })
+      .waitFor({ timeout: TIMEOUTS.QR_CODE_APPEAR })
       .then(() => true)
       .catch(() => false);
 
@@ -151,7 +164,7 @@ export class WhatsAppService {
       onQRRequired();
     }
 
-    await chatListLocator.waitFor({ timeout: 120000 });
+    await chatListLocator.waitFor({ timeout: TIMEOUTS.QR_LOGIN_COMPLETE });
   }
 
   async getRecentChats(limit: number = 5): Promise<Chat[]> {
@@ -159,7 +172,7 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    await this.page.locator(SELECTORS.CHAT_LIST).waitFor({ timeout: 30000 });
+    await this.page.locator(SELECTORS.CHAT_LIST).waitFor({ timeout: TIMEOUTS.CHAT_LIST_LOAD });
 
     const chatItems = await this.page.locator(`${SELECTORS.CHAT_LIST} > ${SELECTORS.CHAT_ROW}`).all();
     const chats: Chat[] = [];
@@ -227,11 +240,11 @@ export class WhatsAppService {
           return !el || el.getAttribute("data-id") !== oldId;
         },
         { sel, oldId: oldFirstId },
-        { timeout: 10000 },
+        { timeout: TIMEOUTS.CHAT_PANEL_REFRESH },
       ).catch(() => {});
     }
 
-    await wrapperLocator.first().waitFor({ timeout: 15000 });
+    await wrapperLocator.first().waitFor({ timeout: TIMEOUTS.MESSAGE_LOAD });
   }
 
   async getMessages(limit: number = 10): Promise<Message[]> {
@@ -242,7 +255,7 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
-    await this.page.locator(SELECTORS.MESSAGE_WRAPPER).first().waitFor({ timeout: 15000 });
+    await this.page.locator(SELECTORS.MESSAGE_WRAPPER).first().waitFor({ timeout: TIMEOUTS.MESSAGE_LOAD });
 
     const wrapperEls = this.page.locator(SELECTORS.MESSAGE_WRAPPER);
     const messages: Message[] = [];
@@ -270,7 +283,7 @@ export class WhatsAppService {
       }
 
       const textEl = wrapper.locator(SELECTORS.MESSAGE_TEXT).first();
-      const text = await textEl.textContent({ timeout: 1000 }).catch(() => null);
+      const text = await textEl.textContent({ timeout: TIMEOUTS.TEXT_CONTENT }).catch(() => null);
 
       const mediaLabel = text === null
         ? await wrapper.evaluate((node) => {
@@ -305,9 +318,9 @@ export class WhatsAppService {
 
     const inputBox = this.page.locator(SELECTORS.INPUT_BOX);
     await inputBox.click();
-    await inputBox.pressSequentially(text, { delay: 30 });
+    await inputBox.pressSequentially(text, { delay: TYPE_DELAY_MS });
 
-    await this.page.waitForTimeout(300);
+    await this.page.waitForTimeout(TIMEOUTS.POST_TYPE_SETTLE);
 
     const sendBtn = this.page.locator(SELECTORS.SEND_BUTTON);
     if (await sendBtn.isVisible().catch(() => false)) {
