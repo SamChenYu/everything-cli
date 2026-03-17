@@ -1,4 +1,4 @@
-# Node.js dependencies
+]# Node.js dependencies
 node_modules/
 
 # Optional npm cache directory
@@ -47,5 +47,4 @@ Thumbs.db
 # yarn.lock
 
 # WhatsApp session (saved browser storage state)
-.whatsapp-session
-
+.whatsapp-chrome-data

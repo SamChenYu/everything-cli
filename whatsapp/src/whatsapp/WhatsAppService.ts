@@ -1,5 +1,4 @@
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import * as fs from "fs";
+import { chromium, type BrowserContext, type Page } from "playwright";
 import * as path from "path";
 
 export interface Chat {
@@ -16,7 +15,7 @@ export interface Message {
   isFromMe: boolean;
 }
 
-const SESSION_PATH = path.join(process.cwd(), ".whatsapp-session");
+const SESSION_DIR = path.join(process.cwd(), ".whatsapp-chrome-data");
 
 /**
  * Helper function to get selector from environment variable with fallback
@@ -37,6 +36,7 @@ const SELECTORS = {
   MESSAGE_OUTGOING_DATA_PREFIX: () => getSelector("WA_MESSAGE_OUTGOING_DATA_PREFIX", 'true_'),
   QR_CODE: () => getSelector("WA_QR_CODE_SELECTOR", '[data-testid="qrcode"]'),
   INPUT_BOX: () => getSelector("WA_INPUT_BOX_SELECTOR", '[data-testid="conversation-compose-box-input"]'),
+  SEND_BUTTON: () => getSelector("WA_SEND_BUTTON_SELECTOR", '[data-testid="send"]'),
 };
 
 /**
@@ -76,23 +76,16 @@ function parsePrePlainText(attr: string): { date: Date; senderName: string } {
 }
 
 export class WhatsAppService {
-  private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
 
   async launch(): Promise<void> {
-    this.browser = await chromium.launch({
+    this.context = await chromium.launchPersistentContext(SESSION_DIR, {
       headless: false,
       args: [
         '--disable-blink-features=AutomationControlled',
         '--no-sandbox',
-      ]
-    });
-
-    const storageStateExists = fs.existsSync(SESSION_PATH);
-
-    this.context = await this.browser.newContext({
-      ...(storageStateExists ? { storageState: SESSION_PATH } : {}),
+      ],
       userAgent:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       viewport: { width: 1280, height: 720 },
@@ -100,9 +93,8 @@ export class WhatsAppService {
       timezoneId: 'America/New_York',
     });
 
-    this.page = await this.context.newPage();
+    this.page = this.context.pages()[0] ?? await this.context.newPage();
 
-    // Remove webdriver property to avoid detection
     await this.page.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', {
         get: () => false,
@@ -142,12 +134,6 @@ export class WhatsAppService {
     }
 
     await chatListLocator.waitFor({ timeout: 120000 });
-
-    // Wait a bit for WhatsApp to fully initialize before saving session
-    await this.page.waitForTimeout(2000);
-
-    // Save session for next time
-    await this.context!.storageState({ path: SESSION_PATH });
   }
 
   async getRecentChats(limit: number = 5): Promise<Chat[]> {
@@ -196,6 +182,17 @@ export class WhatsAppService {
       throw new Error("Browser not launched");
     }
 
+    const msgLocator = this.page.locator(SELECTORS.MESSAGE_CONTAINER());
+    const hadMessages = (await msgLocator.count()) > 0;
+
+    let oldFirstAttr: string | null = null;
+    if (hadMessages) {
+      oldFirstAttr = await msgLocator
+        .first()
+        .getAttribute(SELECTORS.MESSAGE_META_ATTR())
+        .catch(() => null);
+    }
+
     const chatItems = await this.page.locator(`${SELECTORS.CHAT_LIST()} > ${SELECTORS.CHAT_ROW()}`).all();
     const item = chatItems[chatIndex];
     if (!item) {
@@ -203,7 +200,21 @@ export class WhatsAppService {
     }
 
     await item.click();
-    await this.page.locator(SELECTORS.MESSAGE_CONTAINER()).first().waitFor({ timeout: 15000 });
+
+    if (hadMessages && oldFirstAttr) {
+      const sel = SELECTORS.MESSAGE_CONTAINER();
+      const attr = SELECTORS.MESSAGE_META_ATTR();
+      await this.page.waitForFunction(
+        ({ sel, attr, old }) => {
+          const el = document.querySelector(sel);
+          return !el || el.getAttribute(attr) !== old;
+        },
+        { sel, attr, old: oldFirstAttr },
+        { timeout: 10000 },
+      ).catch(() => {});
+    }
+
+    await msgLocator.first().waitFor({ timeout: 15000 });
   }
 
   async getMessages(limit: number = 10): Promise<Message[]> {
@@ -260,17 +271,28 @@ export class WhatsAppService {
 
     const inputBox = this.page.locator(SELECTORS.INPUT_BOX());
     await inputBox.click();
-    await inputBox.fill(text);
-    await this.page.keyboard.press("Enter");
+
+    // execCommand('insertText') fires beforeinput/input events that WhatsApp's
+    // React contenteditable handler actually processes — fill() and
+    // pressSequentially() bypass this event chain.
+    await inputBox.evaluate((el, t) => {
+      (el as HTMLElement).focus();
+      document.execCommand('insertText', false, t);
+    }, text);
+
+    await this.page.waitForTimeout(300);
+
+    const sendBtn = this.page.locator(SELECTORS.SEND_BUTTON());
+    if (await sendBtn.isVisible().catch(() => false)) {
+      await sendBtn.click();
+    } else {
+      await this.page.keyboard.press("Enter");
+    }
   }
 
   async close(): Promise<void> {
     if (this.context) {
-      await this.context.storageState({ path: SESSION_PATH }).catch(() => {});
-    }
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
+      await this.context.close();
       this.context = null;
       this.page = null;
     }
