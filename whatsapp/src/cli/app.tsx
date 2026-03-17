@@ -17,6 +17,8 @@ export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedChatIndex, setSelectedChatIndex] = useState(0);
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const VISIBLE_CHATS = 10;
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [whatsapp] = useState<WhatsAppService>(() => new WhatsAppService());
@@ -34,7 +36,7 @@ export default function App() {
         });
 
         setStage("loading_chats");
-        const recentChats = await whatsapp.getRecentChats(10);
+        const recentChats = await whatsapp.getRecentChats(25);
         setChats(recentChats);
         setStage("selecting_chat");
       } catch (err) {
@@ -63,20 +65,21 @@ export default function App() {
       }
 
       if (key.upArrow) {
-        setSelectedChatIndex((prev) => Math.max(0, prev - 1));
+        setSelectedChatIndex((prev) => {
+          const next = Math.max(0, prev - 1);
+          setScrollOffset((off) => (next < off ? next : off));
+          return next;
+        });
       } else if (key.downArrow) {
-        setSelectedChatIndex((prev) => Math.min(chats.length - 1, prev + 1));
+        setSelectedChatIndex((prev) => {
+          const next = Math.min(chats.length - 1, prev + 1);
+          setScrollOffset((off) => (next >= off + VISIBLE_CHATS ? next - VISIBLE_CHATS + 1 : off));
+          return next;
+        });
       } else if (key.return) {
         const chat = chats[selectedChatIndex];
         if (chat) {
           loadMessages(selectedChatIndex, chat);
-        }
-      } else if (char >= "0" && char <= "9") {
-        const index = char === "0" ? 9 : parseInt(char) - 1;
-        const chat = chats[index];
-        if (chat) {
-          setSelectedChatIndex(index);
-          loadMessages(index, chat);
         }
       }
     } else if (stage === "viewing_messages") {
@@ -202,20 +205,29 @@ export default function App() {
   }
 
   if (stage === "selecting_chat") {
+    const visibleChats = chats.slice(scrollOffset, scrollOffset + VISIBLE_CHATS);
+    const hasMoreAbove = scrollOffset > 0;
+    const hasMoreBelow = scrollOffset + VISIBLE_CHATS < chats.length;
+
     return (
       <Box flexDirection="column">
         <Text color="green" bold>
-          Select a chat (use arrow keys or press 1-9, 0 for 10):
+          Select a chat ({chats.length} chats):
         </Text>
         <Text> </Text>
-        {chats.map((chat, index) => (
-          <Box key={chat.id}>
-            <Text color="green" bold={index === selectedChatIndex}>
-              {index === selectedChatIndex ? "> " : "  "}
-              {index + 1}. {chat.title}
-            </Text>
-          </Box>
-        ))}
+        {hasMoreAbove && <Text color="green" dimColor>  ↑ more chats above</Text>}
+        {visibleChats.map((chat, i) => {
+          const index = scrollOffset + i;
+          return (
+            <Box key={chat.id}>
+              <Text color="green" bold={index === selectedChatIndex}>
+                {index === selectedChatIndex ? "> " : "  "}
+                {index + 1}. {chat.title}
+              </Text>
+            </Box>
+          );
+        })}
+        {hasMoreBelow && <Text color="green" dimColor>  ↓ more chats below</Text>}
         <Text> </Text>
         <Text color="green">Press Enter to select, Ctrl+C to exit</Text>
       </Box>
