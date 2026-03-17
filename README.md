@@ -7,7 +7,11 @@
 ```
 
 ## Secrets scanning setup
+
 ```bash
+pip3 install -r requirements.txt
+# This should be done globally, otherwise hooks for secret scanning would appear inside the virtual env
+
 ./setup.sh
 ./verify-setup.sh
 ```
