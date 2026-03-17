@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Box, Text, useInput, useApp } from "ink";
 import { WhatsAppService } from "../whatsapp/WhatsAppService.js";
 import type { Chat, Message } from "../whatsapp/WhatsAppService.js";
@@ -82,6 +82,7 @@ export default function App() {
     } else if (stage === "viewing_messages") {
       if (key.return) {
         if (input.trim() === ":q") {
+          stopPolling();
           setSelectedChat(null);
           setMessages([]);
           setInput("");
@@ -97,6 +98,36 @@ export default function App() {
     }
   });
 
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isPollingRef = useRef(false);
+
+  const pollMessages = useCallback(async () => {
+    if (isPollingRef.current) return;
+    isPollingRef.current = true;
+    try {
+      const msgs = await whatsapp.getMessages(10);
+      setMessages(msgs);
+    } catch {
+      // Silently ignore polling errors to avoid disrupting the UI
+    } finally {
+      isPollingRef.current = false;
+    }
+  }, [whatsapp]);
+
+  const startPolling = useCallback(() => {
+    stopPolling();
+    pollingRef.current = setInterval(pollMessages, 1000);
+  }, [pollMessages]);
+
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
   const loadMessages = async (chatIndex: number, chat: Chat) => {
     setSelectedChat(chat);
     setStage("loading_messages");
@@ -106,6 +137,7 @@ export default function App() {
       const msgs = await whatsapp.getMessages(10);
       setMessages(msgs);
       setStage("viewing_messages");
+      startPolling();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStage("error");
