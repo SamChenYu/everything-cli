@@ -35,8 +35,8 @@ const SELECTORS = {
   MESSAGE_OUTGOING_DATA_ATTR: () => getSelector("WA_MESSAGE_OUTGOING_DATA_ATTR", 'data-id'),
   MESSAGE_OUTGOING_DATA_PREFIX: () => getSelector("WA_MESSAGE_OUTGOING_DATA_PREFIX", 'true_'),
   QR_CODE: () => getSelector("WA_QR_CODE_SELECTOR", '[data-testid="qrcode"]'),
-  INPUT_BOX: () => getSelector("WA_INPUT_BOX_SELECTOR", '[data-testid="conversation-compose-box-input"]'),
-  SEND_BUTTON: () => getSelector("WA_SEND_BUTTON_SELECTOR", '[data-testid="send"]'),
+  INPUT_BOX: () => getSelector("WA_INPUT_BOX_SELECTOR", 'div[role="textbox"][data-lexical-editor="true"][aria-placeholder="Type a message"]'),
+  SEND_BUTTON: () => getSelector("WA_SEND_BUTTON_SELECTOR", '[aria-label="Send"]'),
 };
 
 /**
@@ -271,14 +271,7 @@ export class WhatsAppService {
 
     const inputBox = this.page.locator(SELECTORS.INPUT_BOX());
     await inputBox.click();
-
-    // execCommand('insertText') fires beforeinput/input events that WhatsApp's
-    // React contenteditable handler actually processes — fill() and
-    // pressSequentially() bypass this event chain.
-    await inputBox.evaluate((el, t) => {
-      (el as HTMLElement).focus();
-      document.execCommand('insertText', false, t);
-    }, text);
+    await inputBox.pressSequentially(text, { delay: 30 });
 
     await this.page.waitForTimeout(300);
 
