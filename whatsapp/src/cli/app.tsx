@@ -25,7 +25,9 @@ export default function App() {
   const [scrollOffset, setScrollOffset] = useState(0);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [whatsapp] = useState<WhatsAppService>(() => new WhatsAppService());
+  const [whatsapp] = useState<WhatsAppService>(() => new WhatsAppService({
+    headless: process.env.HEADLESS !== "false",
+  }));
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const { exit } = useApp();

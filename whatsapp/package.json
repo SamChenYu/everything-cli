@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "tsx src/index.tsx"
+    "start": "tsx src/index.tsx",
+    "dev": "HEADLESS=false tsx src/index.tsx"
   },
   "keywords": [],
   "author": "",

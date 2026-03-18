@@ -109,10 +109,15 @@ function parsePrePlainText(attr: string): { date: Date; senderName: string } {
 export class WhatsAppService {
   private context: BrowserContext | null = null;
   private page: Page | null = null;
+  private headless: boolean;
+
+  constructor(options?: { headless?: boolean }) {
+    this.headless = options?.headless ?? true;
+  }
 
   async launch(): Promise<void> {
     this.context = await chromium.launchPersistentContext(SESSION_DIR, {
-      headless: false,
+      headless: this.headless,
       args: [
         '--disable-blink-features=AutomationControlled',
         '--no-sandbox',
