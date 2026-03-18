@@ -12,10 +12,10 @@ CONVERSATION = """
 
         Rules:
         - Max 75 words.
-        - Prioritize commands and code blocks.
+        - Prioritize commands and if it programming related then code blocks.
         - Avoid long prose.
         - Avoid tables to prevent terminal wrapping issues
-        - Prioritize code blocks for technical solutions
+        - Prioritize code blocks for technical solutions only if it is a software related question.
         """
 
 load_dotenv()
@@ -43,7 +43,7 @@ while True:
 
         if not user_input:
             continue
-        
+
         CONVERSATION += "\nUser:\n"
         CONVERSATION += user_input
         response = model.generate_content(CONVERSATION)
