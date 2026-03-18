@@ -50,7 +50,7 @@ export default function App() {
         await tg.connect();
         setStage("loading_chats");
 
-        const recentChats = await tg.getRecentChats(5);
+        const recentChats = await tg.getRecentChats(10);
         setChats(recentChats);
         setStage("selecting_chat");
       } catch (err) {
@@ -86,8 +86,8 @@ export default function App() {
         if (chat) {
           loadMessages(chat);
         }
-      } else if (char >= "1" && char <= "5") {
-        const index = parseInt(char) - 1;
+      } else if (char >= "0" && char <= "9") {
+        const index = char === "0" ? 9 : parseInt(char) - 1;
         const chat = chats[index];
         if (chat) {
           loadMessages(chat);
@@ -186,7 +186,7 @@ export default function App() {
     return (
       <Box flexDirection="column">
         <Text color="green" bold>
-          Select a chat (use arrow keys or press 1-5):
+          Select a chat (use arrow keys or press 1-9, 0 for 10):
         </Text>
         <Text> </Text>
         {chats.map((chat, index) => (
