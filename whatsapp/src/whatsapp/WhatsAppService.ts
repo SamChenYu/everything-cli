@@ -213,7 +213,7 @@ export class WhatsAppService {
     return chats;
   }
 
-  async openChat(chatIndex: number): Promise<void> {
+  async openChat(chatTitle: string): Promise<void> {
     if (!this.page) {
       throw new Error("Browser not launched");
     }
@@ -229,10 +229,18 @@ export class WhatsAppService {
         .catch(() => null);
     }
 
-    const chatItems = await this.page.locator(`${SELECTORS.CHAT_LIST} > ${SELECTORS.CHAT_ROW}`).all();
-    const item = chatItems[chatIndex];
+    const chatRows = await this.page.locator(`${SELECTORS.CHAT_LIST} > ${SELECTORS.CHAT_ROW}`).all();
+    let item = null;
+    for (const row of chatRows) {
+      const title = await row.locator("span[title]").first().getAttribute("title").catch(() => null);
+      if (title?.trim() === chatTitle) {
+        item = row;
+        break;
+      }
+    }
+
     if (!item) {
-      throw new Error(`Chat at index ${chatIndex} not found`);
+      throw new Error(`Chat "${chatTitle}" not found`);
     }
 
     await item.click();
@@ -287,7 +295,7 @@ export class WhatsAppService {
         senderName = parsed.senderName;
       }
 
-      const textEl = wrapper.locator(SELECTORS.MESSAGE_TEXT).first();
+      const textEl = wrapper.locator(SELECTORS.MESSAGE_TEXT).last();
       const text = await textEl.textContent({ timeout: TIMEOUTS.TEXT_CONTENT }).catch(() => null);
 
       const mediaLabel = text === null

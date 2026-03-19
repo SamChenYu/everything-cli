@@ -30,6 +30,7 @@ export default function App() {
   }));
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [sendingText, setSendingText] = useState<string | null>(null);
   const { exit } = useApp();
 
   useEffect(() => {
@@ -85,7 +86,7 @@ export default function App() {
       } else if (key.return) {
         const chat = chats[selectedChatIndex];
         if (chat) {
-          loadMessages(selectedChatIndex, chat);
+          loadMessages(chat);
         }
       }
     } else if (stage === "viewing_messages") {
@@ -137,12 +138,12 @@ export default function App() {
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  const loadMessages = async (chatIndex: number, chat: Chat) => {
+  const loadMessages = async (chat: Chat) => {
     setSelectedChat(chat);
     setStage("loading_messages");
 
     try {
-      await whatsapp.openChat(chatIndex);
+      await whatsapp.openChat(chat.title);
       const msgs = await whatsapp.getMessages(MESSAGE_LIMIT);
       setMessages(msgs);
       setStage("viewing_messages");
@@ -155,11 +156,16 @@ export default function App() {
 
   const sendMessage = async (text: string) => {
     if (isSending) return;
+    const messageToSend = text.trim();
+    if (!messageToSend) return;
+
+    setInput("");
     setIsSending(true);
+    setSendingText(messageToSend);
+    stopPolling();
 
     try {
-      await whatsapp.sendMessage(text);
-      setInput("");
+      await whatsapp.sendMessage(messageToSend);
       const msgs = await whatsapp.getMessages(MESSAGE_LIMIT);
       setMessages(msgs);
     } catch (err) {
@@ -167,6 +173,8 @@ export default function App() {
       setStage("error");
     } finally {
       setIsSending(false);
+      setSendingText(null);
+      startPolling();
     }
   };
 
@@ -263,10 +271,13 @@ export default function App() {
           </Box>
         ))}
         <Text> </Text>
-        <Box borderStyle="single" borderColor="green" paddingX={1}>
-          <Text color="green">
-            {isSending ? "Sending..." : `> ${input}`}
-          </Text>
+        {sendingText && (
+          <Box paddingX={1}>
+            <Text color="yellow" dimColor>Sending: {sendingText}</Text>
+          </Box>
+        )}
+        <Box borderStyle="single" borderColor={isSending ? "yellow" : "green"} paddingX={1}>
+          <Text color="green">{`> ${input}`}</Text>
         </Box>
         <Text> </Text>
         <Text color="green">
