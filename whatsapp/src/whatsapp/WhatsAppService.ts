@@ -5,6 +5,7 @@ export interface Chat {
   id: string;
   title: string;
   lastMessage: string;
+  hasUnread: boolean;
 }
 
 export interface Message {
@@ -34,6 +35,7 @@ const TYPE_DELAY_MS = 30;
 const REQUIRED_ENV_KEYS = [
   "WA_CHAT_LIST_SELECTOR",
   "WA_CHAT_ROW_SELECTOR",
+  "WA_CHAT_UNREAD_BADGE_SELECTOR",
   "WA_MESSAGE_WRAPPER_SELECTOR",
   "WA_MESSAGE_META_SELECTOR",
   "WA_MESSAGE_META_ATTR",
@@ -58,6 +60,7 @@ function loadSelectors() {
   return {
     CHAT_LIST: process.env.WA_CHAT_LIST_SELECTOR!,
     CHAT_ROW: process.env.WA_CHAT_ROW_SELECTOR!,
+    CHAT_UNREAD_BADGE: process.env.WA_CHAT_UNREAD_BADGE_SELECTOR!,
     MESSAGE_WRAPPER: process.env.WA_MESSAGE_WRAPPER_SELECTOR!,
     MESSAGE_META: process.env.WA_MESSAGE_META_SELECTOR!,
     MESSAGE_META_ATTR: process.env.WA_MESSAGE_META_ATTR!,
@@ -204,10 +207,13 @@ export class WhatsAppService {
         }
       }
 
+      const hasUnread = (await item.locator(SELECTORS.CHAT_UNREAD_BADGE).count()) > 0;
+
       chats.push({
         id: String(i),
         title: title.trim(),
         lastMessage: lastMessage.trim(),
+        hasUnread,
       });
     }
 

@@ -7,6 +7,7 @@ export interface Chat {
   id: string;
   title: string;
   type: string;
+  hasUnread: boolean;
 }
 
 export interface Message {
@@ -93,6 +94,7 @@ export class TelegramService {
         id: dialog.id?.toString() || "",
         title,
         type,
+        hasUnread: (dialog.unreadCount ?? 0) > 0,
       };
     });
   }

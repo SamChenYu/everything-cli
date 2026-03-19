@@ -193,7 +193,7 @@ export default function App() {
           <Box key={chat.id}>
             <Text color="green" bold={index === selectedChatIndex}>
               {index === selectedChatIndex ? "> " : "  "}
-              {index + 1}. {chat.title} ({chat.type})
+              {chat.hasUnread ? "(*) " : ""}{index + 1}. {chat.title} ({chat.type})
             </Text>
           </Box>
         ))}
