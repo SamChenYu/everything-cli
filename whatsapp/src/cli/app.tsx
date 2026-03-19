@@ -96,7 +96,7 @@ export default function App() {
           setSelectedChat(null);
           setMessages([]);
           setInput("");
-          setStage("selecting_chat");
+          refreshChats();
         } else if (input.trim() !== "") {
           sendMessage(input);
         }
@@ -137,6 +137,20 @@ export default function App() {
   }, []);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
+
+  const refreshChats = async () => {
+    setStage("loading_chats");
+    try {
+      const recentChats = await whatsapp.getRecentChats(RECENT_CHATS_LIMIT);
+      setChats(recentChats);
+      setSelectedChatIndex(0);
+      setScrollOffset(0);
+      setStage("selecting_chat");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStage("error");
+    }
+  };
 
   const loadMessages = async (chat: Chat) => {
     setSelectedChat(chat);
@@ -236,7 +250,8 @@ export default function App() {
             <Box key={chat.id}>
               <Text color="green" bold={index === selectedChatIndex}>
                 {index === selectedChatIndex ? "> " : "  "}
-                {chat.hasUnread ? "(*) " : ""}{index + 1}. {chat.title}
+                {chat.hasUnread && <Text color="yellow" bold>● </Text>}
+                {index + 1}. {chat.title}
               </Text>
             </Box>
           );
@@ -266,7 +281,7 @@ export default function App() {
         {messages.map((msg, i) => (
           <Box key={msg.id || i} flexDirection="column" marginBottom={0}>
             {msg.quotedText && (
-              <Text color="gray" dimColor>
+              <Text color="green" dimColor>
                 {"  "}┃ {msg.quotedText}
               </Text>
             )}
