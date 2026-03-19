@@ -265,6 +265,11 @@ export default function App() {
         <Text> </Text>
         {messages.map((msg, i) => (
           <Box key={msg.id || i} flexDirection="column" marginBottom={0}>
+            {msg.quotedText && (
+              <Text color="gray" dimColor>
+                {"  "}┃ {msg.quotedText}
+              </Text>
+            )}
             <Text color={msg.isFromMe ? "cyan" : "green"}>
               [{msg.date.toLocaleTimeString()}] {msg.senderName}: {msg.text}
             </Text>

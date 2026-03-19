@@ -13,6 +13,7 @@ export interface Message {
   date: Date;
   senderName: string;
   isFromMe: boolean;
+  quotedText?: string;
 }
 
 const SESSION_DIR = path.join(process.cwd(), ".whatsapp-chrome-data");
@@ -295,7 +296,18 @@ export class WhatsAppService {
         senderName = parsed.senderName;
       }
 
-      const textEl = wrapper.locator(SELECTORS.MESSAGE_TEXT).last();
+      const allTextEls = wrapper.locator(SELECTORS.MESSAGE_TEXT);
+      const textCount = await allTextEls.count();
+
+      let quotedText: string | undefined;
+      if (textCount > 1) {
+        quotedText = await allTextEls.first()
+          .textContent({ timeout: TIMEOUTS.TEXT_CONTENT })
+          .then((t) => t?.trim() || undefined)
+          .catch(() => undefined);
+      }
+
+      const textEl = allTextEls.last();
       const text = await textEl.textContent({ timeout: TIMEOUTS.TEXT_CONTENT }).catch(() => null);
 
       const mediaLabel = text === null
@@ -318,6 +330,7 @@ export class WhatsAppService {
         date,
         senderName: senderName || (isFromMe ? "Me" : "Them"),
         isFromMe,
+        ...(quotedText ? { quotedText } : {}),
       });
     }
 
