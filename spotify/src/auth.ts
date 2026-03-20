@@ -12,6 +12,10 @@ const SCOPES = [
   "user-modify-playback-state",
   "user-read-currently-playing",
   "user-read-recently-played",
+  "playlist-read-private",
+  "playlist-read-collaborative",
+  "user-library-read",
+  "user-library-modify",
 ];
 
 interface StoredToken {
