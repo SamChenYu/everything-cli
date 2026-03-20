@@ -61,7 +61,19 @@ export async function authenticate(): Promise<SpotifyApi> {
     refresh_token: stored.refresh_token,
   };
 
-  return SpotifyApi.withAccessToken(clientId, accessToken);
+  return SpotifyApi.withAccessToken(clientId, accessToken, {
+    deserializer: {
+      async deserialize<T>(response: Response): Promise<T> {
+        const text = await response.text();
+        if (!text) return null as T;
+        try {
+          return JSON.parse(text) as T;
+        } catch {
+          return null as T;
+        }
+      },
+    },
+  });
 }
 
 async function doAuthFlow(
