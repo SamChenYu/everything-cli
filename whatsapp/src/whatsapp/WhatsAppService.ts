@@ -360,6 +360,9 @@ export class WhatsAppService {
     } else {
       await this.page.keyboard.press("Enter");
     }
+
+    const postSendSettleMs = text.length * TYPE_DELAY_MS + 200;
+    await this.page.waitForTimeout(postSendSettleMs);
   }
 
   async close(): Promise<void> {

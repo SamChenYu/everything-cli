@@ -26,7 +26,7 @@ export default function App() {
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [whatsapp] = useState<WhatsAppService>(() => new WhatsAppService({
-    headless: process.env.HEADLESS !== "false",
+    headless: process.env.HEADLESS !== "false" && !process.argv.includes("--no-headless"),
   }));
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
