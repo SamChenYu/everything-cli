@@ -16,6 +16,8 @@ export interface Message {
   date: Date;
   senderId: string | undefined;
   senderName: string;
+  isFromMe: boolean;
+  quotedText?: string;
 }
 
 export class TelegramService {
@@ -106,6 +108,21 @@ export class TelegramService {
 
     const messages = await this.client.getMessages(chatId, { limit });
 
+    const replyToIds = messages
+      .map((msg) => (msg.replyTo as Api.MessageReplyHeader | undefined)?.replyToMsgId)
+      .filter((id): id is number => id != null);
+
+    const repliedMessages = replyToIds.length > 0
+      ? await this.client.getMessages(chatId, { ids: replyToIds })
+      : [];
+
+    const repliedMap = new Map<number, string>();
+    for (const rm of repliedMessages) {
+      if (rm) {
+        repliedMap.set(rm.id, rm.text || "(no text)");
+      }
+    }
+
     return messages.map((msg) => {
       let senderName = "Unknown";
 
@@ -119,12 +136,17 @@ export class TelegramService {
         }
       }
 
+      const replyToMsgId = (msg.replyTo as Api.MessageReplyHeader | undefined)?.replyToMsgId;
+      const quotedText = replyToMsgId ? repliedMap.get(replyToMsgId) : undefined;
+
       return {
         id: msg.id,
         text: msg.text || "(no text)",
         date: new Date(msg.date * 1000),
         senderId: msg.senderId?.toString(),
         senderName,
+        isFromMe: msg.out ?? false,
+        ...(quotedText ? { quotedText } : {}),
       };
     });
   }
@@ -154,6 +176,7 @@ export class TelegramService {
       date: new Date(msg.date * 1000),
       senderId: msg.senderId?.toString(),
       senderName,
+      isFromMe: true,
     };
   }
 
@@ -182,7 +205,6 @@ export class TelegramService {
           }
         }
       } catch (e) {
-        // If we can't get the sender, fall back to Unknown
         if (msg.sender && msg.sender instanceof Api.User) {
           senderName = msg.sender.firstName || "";
           if (msg.sender.lastName) {
@@ -194,12 +216,27 @@ export class TelegramService {
         }
       }
 
+      let quotedText: string | undefined;
+      const replyToMsgId = (msg.replyTo as Api.MessageReplyHeader | undefined)?.replyToMsgId;
+      if (replyToMsgId && this.client) {
+        try {
+          const [repliedMsg] = await this.client.getMessages(chatId, { ids: [replyToMsgId] });
+          if (repliedMsg) {
+            quotedText = repliedMsg.text || "(no text)";
+          }
+        } catch {
+          // Could not fetch the replied-to message
+        }
+      }
+
       callback({
         id: msg.id,
         text: msg.text || "(no text)",
         date: new Date(msg.date * 1000),
         senderId: msg.senderId?.toString(),
         senderName,
+        isFromMe: msg.out ?? false,
+        ...(quotedText ? { quotedText } : {}),
       });
     };
 

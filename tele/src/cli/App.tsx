@@ -221,7 +221,12 @@ export default function App() {
         <Text> </Text>
         {messages.map((msg) => (
           <Box key={msg.id} flexDirection="column" marginBottom={0}>
-            <Text color="green">
+            {msg.quotedText && (
+              <Text color="green" dimColor>
+                {"  "}┃ {msg.quotedText}
+              </Text>
+            )}
+            <Text color={msg.isFromMe ? "blue" : "green"}>
               [{msg.date.toLocaleString()}] {msg.senderName}: {msg.text}
             </Text>
           </Box>
