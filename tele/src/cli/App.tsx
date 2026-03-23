@@ -226,7 +226,7 @@ export default function App() {
                 {"  "}┃ {msg.quotedText}
               </Text>
             )}
-            <Text color={msg.isFromMe ? "blue" : "green"}>
+            <Text color={msg.isFromMe ? "cyan" : "green"}>
               [{msg.date.toLocaleString()}] {msg.senderName}: {msg.text}
             </Text>
           </Box>
