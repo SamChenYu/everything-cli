@@ -8,6 +8,14 @@ export interface Chat {
   title: string;
   type: string;
   hasUnread: boolean;
+  isForum: boolean;
+}
+
+export interface ForumTopic {
+  id: number;
+  title: string;
+  unreadCount: number;
+  closed: boolean;
 }
 
 export interface Message {
@@ -74,6 +82,7 @@ export class TelegramService {
       const entity = dialog.entity;
       let title = "Unknown";
       let type = "unknown";
+      let isForum = false;
 
       if (entity instanceof Api.User) {
         title = entity.firstName || "";
@@ -90,6 +99,7 @@ export class TelegramService {
       } else if (entity instanceof Api.Channel) {
         title = entity.title;
         type = entity.broadcast ? "channel" : "group";
+        isForum = entity.forum ?? false;
       }
 
       return {
@@ -97,20 +107,48 @@ export class TelegramService {
         title,
         type,
         hasUnread: (dialog.unreadCount ?? 0) > 0,
+        isForum,
       };
     });
   }
 
-  async getMessages(chatId: string, limit: number = 10): Promise<Message[]> {
+  async getForumTopics(chatId: string): Promise<ForumTopic[]> {
     if (!this.client) {
       throw new Error("Client not connected");
     }
 
-    const messages = await this.client.getMessages(chatId, { limit });
+    const result = await this.client.invoke(
+      new Api.channels.GetForumTopics({
+        channel: chatId,
+        offsetDate: 0,
+        offsetId: 0,
+        offsetTopic: 0,
+        limit: 100,
+      })
+    );
+
+    return result.topics
+      .filter((t): t is Api.ForumTopic => t instanceof Api.ForumTopic)
+      .map((topic) => ({
+        id: topic.id,
+        title: topic.title,
+        unreadCount: topic.unreadCount,
+        closed: topic.closed ?? false,
+      }));
+  }
+
+  async getMessages(chatId: string, limit: number = 10, topicId?: number): Promise<Message[]> {
+    if (!this.client) {
+      throw new Error("Client not connected");
+    }
+
+    const messages = topicId
+      ? await this.client.getMessages(chatId, { limit, replyTo: topicId })
+      : await this.client.getMessages(chatId, { limit });
 
     const replyToIds = messages
       .map((msg) => (msg.replyTo as Api.MessageReplyHeader | undefined)?.replyToMsgId)
-      .filter((id): id is number => id != null);
+      .filter((id): id is number => id != null && id !== topicId);
 
     const repliedMessages = replyToIds.length > 0
       ? await this.client.getMessages(chatId, { ids: replyToIds })
@@ -137,7 +175,9 @@ export class TelegramService {
       }
 
       const replyToMsgId = (msg.replyTo as Api.MessageReplyHeader | undefined)?.replyToMsgId;
-      const quotedText = replyToMsgId ? repliedMap.get(replyToMsgId) : undefined;
+      const quotedText = replyToMsgId && replyToMsgId !== topicId
+        ? repliedMap.get(replyToMsgId)
+        : undefined;
 
       return {
         id: msg.id,
@@ -151,12 +191,15 @@ export class TelegramService {
     });
   }
 
-  async sendMessage(chatId: string, text: string): Promise<Message> {
+  async sendMessage(chatId: string, text: string, topicId?: number): Promise<Message> {
     if (!this.client) {
       throw new Error("Client not connected");
     }
 
-    const result = await this.client.sendMessage(chatId, { message: text });
+    const result = await this.client.sendMessage(chatId, {
+      message: text,
+      ...(topicId ? { replyTo: topicId } : {}),
+    });
     const msg = result as Api.Message;
 
     let senderName = "You";
@@ -180,7 +223,7 @@ export class TelegramService {
     };
   }
 
-  subscribeToNewMessages(chatId: string, callback: (msg: Message) => void): void {
+  subscribeToNewMessages(chatId: string, callback: (msg: Message) => void, topicId?: number): void {
     if (!this.client) {
       throw new Error("Client not connected");
     }
@@ -191,6 +234,13 @@ export class TelegramService {
 
     const handler = async (event: NewMessageEvent): Promise<void> => {
       const msg = event.message;
+
+      if (topicId) {
+        const replyHeader = msg.replyTo as Api.MessageReplyHeader | undefined;
+        const msgTopicId = replyHeader?.replyToTopId ?? replyHeader?.replyToMsgId;
+        if (msgTopicId !== topicId) return;
+      }
+
       let senderName = "Unknown";
 
       try {
@@ -218,7 +268,7 @@ export class TelegramService {
 
       let quotedText: string | undefined;
       const replyToMsgId = (msg.replyTo as Api.MessageReplyHeader | undefined)?.replyToMsgId;
-      if (replyToMsgId && this.client) {
+      if (replyToMsgId && replyToMsgId !== topicId && this.client) {
         try {
           const [repliedMsg] = await this.client.getMessages(chatId, { ids: [replyToMsgId] });
           if (repliedMsg) {

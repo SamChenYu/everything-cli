@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Box, Text, useInput, useApp } from "ink";
 import { TelegramService } from "../telegram/TelegramService.js";
-import type { Chat, Message } from "../telegram/TelegramService.js";
+import type { Chat, Message, ForumTopic } from "../telegram/TelegramService.js";
 
-type Stage = "connecting" | "loading_chats" | "selecting_chat" | "loading_messages" | "viewing_messages" | "error";
+type Stage = "connecting" | "loading_chats" | "selecting_chat" | "loading_topics" | "selecting_topic" | "loading_messages" | "viewing_messages" | "error";
 
 export default function App() {
   const [stage, setStage] = useState<Stage>("connecting");
@@ -11,6 +11,9 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedChatIndex, setSelectedChatIndex] = useState(0);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
+  const [topics, setTopics] = useState<ForumTopic[]>([]);
+  const [selectedTopicIndex, setSelectedTopicIndex] = useState(0);
+  const [selectedTopic, setSelectedTopic] = useState<ForumTopic | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [telegram, setTelegram] = useState<TelegramService | null>(null);
   const telegramRef = useRef<TelegramService | null>(null);
@@ -84,24 +87,51 @@ export default function App() {
       } else if (key.return) {
         const chat = chats[selectedChatIndex];
         if (chat) {
-          loadMessages(chat);
+          selectChat(chat);
         }
       } else if (char >= "0" && char <= "9") {
         const index = char === "0" ? 9 : parseInt(char) - 1;
         const chat = chats[index];
         if (chat) {
-          loadMessages(chat);
+          selectChat(chat);
         }
+      }
+    } else if (stage === "selecting_topic") {
+      if (key.upArrow) {
+        setSelectedTopicIndex((prev) => Math.max(0, prev - 1));
+      } else if (key.downArrow) {
+        setSelectedTopicIndex((prev) => Math.min(topics.length - 1, prev + 1));
+      } else if (key.return) {
+        const topic = topics[selectedTopicIndex];
+        if (topic) {
+          loadMessages(selectedChat!, topic);
+        }
+      } else if (char >= "0" && char <= "9") {
+        const index = char === "0" ? 9 : parseInt(char) - 1;
+        const topic = topics[index];
+        if (topic) {
+          loadMessages(selectedChat!, topic);
+        }
+      } else if (key.escape) {
+        setSelectedChat(null);
+        setTopics([]);
+        setSelectedTopicIndex(0);
+        setStage("selecting_chat");
       }
     } else if (stage === "viewing_messages") {
       if (key.return) {
         if (input.trim() === ":q") {
-          // Go back to chat selection
           telegram?.unsubscribeFromNewMessages();
-          setSelectedChat(null);
           setMessages([]);
           setInput("");
-          setStage("selecting_chat");
+          if (selectedTopic) {
+            setSelectedTopic(null);
+            setSelectedTopicIndex(0);
+            setStage("selecting_topic");
+          } else {
+            setSelectedChat(null);
+            setStage("selecting_chat");
+          }
         } else if (input.trim() !== "") {
           // Send message
           sendMessage(input);
@@ -116,8 +146,29 @@ export default function App() {
     }
   });
 
-  const loadMessages = async (chat: Chat) => {
+  const selectChat = async (chat: Chat) => {
     setSelectedChat(chat);
+
+    if (chat.isForum) {
+      setStage("loading_topics");
+      try {
+        if (!telegram) throw new Error("Telegram not initialized");
+        const forumTopics = await telegram.getForumTopics(chat.id);
+        setTopics(forumTopics);
+        setSelectedTopicIndex(0);
+        setStage("selecting_topic");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        setStage("error");
+      }
+    } else {
+      loadMessages(chat);
+    }
+  };
+
+  const loadMessages = async (chat: Chat, topic?: ForumTopic) => {
+    setSelectedChat(chat);
+    if (topic) setSelectedTopic(topic);
     setStage("loading_messages");
 
     try {
@@ -125,13 +176,14 @@ export default function App() {
         throw new Error("Telegram not initialized");
       }
 
-      const msgs = await telegram.getMessages(chat.id, 10);
+      const topicId = topic?.id;
+      const msgs = await telegram.getMessages(chat.id, 10, topicId);
       setMessages(msgs.reverse());
       setStage("viewing_messages");
 
       telegram.subscribeToNewMessages(chat.id, (newMsg) => {
         setMessages((prev) => [...prev, newMsg]);
-      });
+      }, topicId);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStage("error");
@@ -146,7 +198,7 @@ export default function App() {
     setIsSending(true);
 
     try {
-      const sentMessage = await telegram.sendMessage(selectedChat.id, text);
+      const sentMessage = await telegram.sendMessage(selectedChat.id, text, selectedTopic?.id);
       setMessages((prev) => [...prev, sentMessage]);
       setInput("");
     } catch (err) {
@@ -194,12 +246,43 @@ export default function App() {
             <Text color="green" bold={index === selectedChatIndex}>
               {index === selectedChatIndex ? "> " : "  "}
               {chat.hasUnread && <Text color="yellow" bold>● </Text>}
-              {index + 1}. {chat.title} ({chat.type})
+              {index + 1}. {chat.title} ({chat.type}{chat.isForum ? " - forum" : ""})
             </Text>
           </Box>
         ))}
         <Text> </Text>
         <Text color="green">Press Enter to select, Ctrl+C to exit</Text>
+      </Box>
+    );
+  }
+
+  if (stage === "loading_topics") {
+    return (
+      <Box flexDirection="column">
+        <Text color="green">Loading topics from {selectedChat?.title}...</Text>
+      </Box>
+    );
+  }
+
+  if (stage === "selecting_topic") {
+    return (
+      <Box flexDirection="column">
+        <Text color="green" bold>
+          {selectedChat?.title} — Select a topic (use arrow keys or press 1-9, 0 for 10):
+        </Text>
+        <Text> </Text>
+        {topics.map((topic, index) => (
+          <Box key={topic.id}>
+            <Text color="green" bold={index === selectedTopicIndex}>
+              {index === selectedTopicIndex ? "> " : "  "}
+              {topic.unreadCount > 0 && <Text color="yellow" bold>● </Text>}
+              {index + 1}. {topic.title}
+              {topic.closed ? " (closed)" : ""}
+            </Text>
+          </Box>
+        ))}
+        <Text> </Text>
+        <Text color="green">Press Enter to select, Esc to go back, Ctrl+C to exit</Text>
       </Box>
     );
   }
@@ -216,7 +299,7 @@ export default function App() {
     return (
       <Box flexDirection="column">
         <Text color="green" bold>
-          Messages from: {selectedChat?.title}
+          Messages from: {selectedChat?.title}{selectedTopic ? ` > ${selectedTopic.title}` : ""}
         </Text>
         <Text> </Text>
         {messages.map((msg) => (
