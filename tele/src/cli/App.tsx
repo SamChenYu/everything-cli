@@ -21,6 +21,20 @@ export default function App() {
   const [isSending, setIsSending] = useState(false);
   const { exit } = useApp();
 
+  // Shared cleanup function for graceful shutdown
+  const cleanupAndExit = useRef(async () => {
+    const currentTelegram = telegramRef.current;
+    if (currentTelegram) {
+      try {
+        currentTelegram.unsubscribeFromNewMessages();
+        await currentTelegram.disconnect();
+      } catch (err) {
+        // Ignore errors during shutdown
+      }
+    }
+    process.exit(0);
+  });
+
   useEffect(() => {
     const init = async () => {
       try {
@@ -64,7 +78,20 @@ export default function App() {
 
     init();
 
+    // Handle SIGINT/SIGTERM for clean shutdown
+    const handleShutdown = () => {
+      cleanupAndExit.current();
+    };
+
+    process.on('SIGINT', handleShutdown);
+    process.on('SIGTERM', handleShutdown);
+
     return () => {
+      // Remove signal handlers
+      process.off('SIGINT', handleShutdown);
+      process.off('SIGTERM', handleShutdown);
+
+      // Cleanup (note: this is not async-safe, but signal handlers cover the main case)
       const currentTelegram = telegramRef.current;
       if (currentTelegram) {
         currentTelegram.unsubscribeFromNewMessages();
@@ -75,7 +102,8 @@ export default function App() {
 
   useInput((char, key) => {
     if (key.ctrl && char === "c") {
-      exit();
+      // Trigger graceful shutdown with async cleanup
+      cleanupAndExit.current();
       return;
     }
 
