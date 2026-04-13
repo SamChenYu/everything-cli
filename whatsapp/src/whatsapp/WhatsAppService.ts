@@ -129,8 +129,8 @@ export class WhatsAppService {
       userAgent:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       viewport: { width: 1280, height: 720 },
-      locale: 'en-US',
-      timezoneId: 'America/New_York',
+      locale: 'en-GB',
+      timezoneId: 'Europe/London',
     });
 
     this.page = this.context.pages()[0] ?? await this.context.newPage();
