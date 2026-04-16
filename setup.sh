@@ -3,6 +3,10 @@ set -e
 
 echo "Setting up everything-cli..."
 
+
+
+
+
 # Check if Python is installed
 if ! command -v python3 &> /dev/null; then
     echo "ERROR: Python 3 is required but not installed."
@@ -45,7 +49,61 @@ else
 fi
 
 echo ""
+echo "Setting up Python projects..."
+
+# Python folders setup
+PYTHON_FOLDERS=("autogitignore" "gemini" "tcp-messenger")
+for folder in "${PYTHON_FOLDERS[@]}"; do
+    if [ -d "$folder" ]; then
+        echo "Setting up $folder..."
+        cd "$folder"
+
+        if [ ! -d "venv" ]; then
+            echo "  Creating virtual environment..."
+            python3 -m venv venv
+            echo "  Installing requirements..."
+            source venv/bin/activate
+            if [ -f "requirements.txt" ]; then
+                pip install -r requirements.txt
+            fi
+            deactivate
+        else
+            echo "  Virtual environment already exists"
+        fi
+
+        cd ..
+    fi
+done
+
+echo ""
+echo "Setting up npm projects..."
+
+# npm folders setup
+NPM_FOLDERS=("spotify" "tele" "whatsapp")
+for folder in "${NPM_FOLDERS[@]}"; do
+    if [ -d "$folder" ]; then
+        echo "Setting up $folder..."
+        cd "$folder"
+
+        if [ ! -d "node_modules" ]; then
+            echo "  Running npm install..."
+            npm install
+        else
+            echo "  node_modules already exists"
+        fi
+
+        if [ -f ".env.sample" ] && [ ! -f ".env" ]; then
+            echo "  Copying .env.sample to .env..."
+            cp .env.sample .env
+        fi
+
+        cd ..
+    fi
+done
+
+echo ""
+echo "Setup complete!"
+echo ""
 echo "Next steps:"
-echo "   1. Copy .env.sample files in subdirectories"
-echo "   2. Rename to .env and add your credentials"
-echo "   3. The .env files are automatically ignored by git"
+echo "   1. Update .env files in subdirectories with your credentials"
+echo "   2. The .env files are automatically ignored by git"
