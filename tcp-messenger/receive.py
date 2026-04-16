@@ -215,8 +215,14 @@ def main():
         s.settimeout(1.0)  # Timeout to allow checking for keyboard interrupt
 
         # Get and display the local IP address
-        hostname = socket.gethostname()
-        local_ip = socket.gethostbyname(hostname)
+        try:
+            # Use a more reliable method to get local IP
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as temp_s:
+                temp_s.connect(('8.8.8.8', 80))
+                local_ip = temp_s.getsockname()[0]
+        except Exception:
+            local_ip = "Unable to determine"
+
         print(f"Server IP Address: {local_ip}")
         print(f"Listening on port {PORT}...")
         print("Press Ctrl+C to stop\n")
