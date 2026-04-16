@@ -25,6 +25,16 @@ HOST = '0.0.0.0'  # Listen on all interfaces
 PORT = 9999       # Port to listen on
 BUFFER_SIZE = 4096
 
+def recv_exact(sock, num_bytes):
+    """Receive exactly num_bytes from socket"""
+    data = b''
+    while len(data) < num_bytes:
+        chunk = sock.recv(num_bytes - len(data))
+        if not chunk:
+            raise ConnectionError("Socket connection closed")
+        data += chunk
+    return data
+
 def generate_rsa_keypair():
     """Generate RSA public/private key pair"""
     private_key = rsa.generate_private_key(
@@ -49,8 +59,8 @@ def deserialize_public_key(key_bytes):
 def exchange_keys(conn, my_public_key):
     """Exchange public keys with the client"""
     # Receive client's public key
-    client_key_len = int.from_bytes(conn.recv(4), 'big')
-    client_public_bytes = conn.recv(client_key_len)
+    client_key_len = int.from_bytes(recv_exact(conn, 4), 'big')
+    client_public_bytes = recv_exact(conn, client_key_len)
     client_public_key = deserialize_public_key(client_public_bytes)
 
     # Send our public key
@@ -117,10 +127,11 @@ def get_desktop_path():
     else:
         return home
 
-def receive_file(conn, metadata, output_dir):
+def receive_file(conn, metadata, output_dir, private_key=None):
     """Receive a file from the connection"""
     filename = metadata['filename']
     filesize = metadata['filesize']
+    encrypted = metadata.get('encrypted', False)
 
     filepath = os.path.join(output_dir, filename)
 
@@ -132,42 +143,71 @@ def receive_file(conn, metadata, output_dir):
         counter += 1
 
     print(f"Receiving file: {filename} ({filesize} bytes)")
+    if encrypted:
+        print("  (encrypted)")
 
+    # Receive all data first
+    data = b''
+    bytes_received = 0
+    while bytes_received < filesize:
+        chunk = conn.recv(min(BUFFER_SIZE, filesize - bytes_received))
+        if not chunk:
+            break
+        data += chunk
+        bytes_received += len(chunk)
+        print(f"\rProgress: {bytes_received}/{filesize} bytes ({100*bytes_received//filesize}%)", end='')
+
+    print()
+
+    # Decrypt if needed
+    if encrypted and private_key:
+        print("Decrypting file...")
+        data = decrypt_large_data(data, private_key)
+
+    # Save file
     with open(filepath, 'wb') as f:
-        bytes_received = 0
-        while bytes_received < filesize:
-            chunk = conn.recv(min(BUFFER_SIZE, filesize - bytes_received))
-            if not chunk:
-                break
-            f.write(chunk)
-            bytes_received += len(chunk)
-            print(f"\rProgress: {bytes_received}/{filesize} bytes ({100*bytes_received//filesize}%)", end='')
+        f.write(data)
 
-    print(f"\nFile saved to: {filepath}\n")
+    print(f"File saved to: {filepath}\n")
     return filepath
 
-def receive_directory(conn, metadata, output_dir):
+def receive_directory(conn, metadata, output_dir, private_key=None):
     """Receive a directory (as zip) from the connection"""
     filename = metadata['filename']
     filesize = metadata['filesize']
     original_dirname = metadata.get('original_dirname', 'received_directory')
+    encrypted = metadata.get('encrypted', False)
 
     # Save zip to temporary location
     temp_zip = os.path.join(output_dir, filename)
 
     print(f"Receiving directory: {original_dirname} ({filesize} bytes)")
+    if encrypted:
+        print("  (encrypted)")
 
+    # Receive all data first
+    data = b''
+    bytes_received = 0
+    while bytes_received < filesize:
+        chunk = conn.recv(min(BUFFER_SIZE, filesize - bytes_received))
+        if not chunk:
+            break
+        data += chunk
+        bytes_received += len(chunk)
+        print(f"\rProgress: {bytes_received}/{filesize} bytes ({100*bytes_received//filesize}%)", end='')
+
+    print()
+
+    # Decrypt if needed
+    if encrypted and private_key:
+        print("Decrypting directory...")
+        data = decrypt_large_data(data, private_key)
+
+    # Save decrypted zip
     with open(temp_zip, 'wb') as f:
-        bytes_received = 0
-        while bytes_received < filesize:
-            chunk = conn.recv(min(BUFFER_SIZE, filesize - bytes_received))
-            if not chunk:
-                break
-            f.write(chunk)
-            bytes_received += len(chunk)
-            print(f"\rProgress: {bytes_received}/{filesize} bytes ({100*bytes_received//filesize}%)", end='')
+        f.write(data)
 
-    print(f"\nExtracting directory...")
+    print(f"Extracting directory...")
 
     # Extract zip
     extract_path = os.path.join(output_dir, original_dirname)
@@ -186,9 +226,21 @@ def receive_directory(conn, metadata, output_dir):
 
     print(f"Directory saved to: {extract_path}\n")
 
-def receive_message(metadata):
+def receive_message(conn, metadata, private_key):
     """Process a received text message"""
-    message = metadata.get('content', '')
+    message_size = metadata['size']
+    encrypted = metadata.get('encrypted', False)
+
+    # Receive message data
+    message_data = recv_exact(conn, message_size)
+
+    # Decrypt if needed
+    if encrypted and private_key:
+        decrypted_bytes = decrypt_with_rsa(message_data, private_key)
+        message = decrypted_bytes.decode('utf-8')
+    else:
+        message = message_data.decode('utf-8')
+
     print(f"Received: {message}\n")
 
 def main():
@@ -207,6 +259,14 @@ def main():
         os.makedirs(output_dir)
 
     print(f"Files will be saved to: {output_dir}")
+
+    # Generate RSA key pair if encryption is enabled
+    private_key = None
+    public_key = None
+    if ENABLE_ENCRYPTION:
+        print("Generating encryption keys...")
+        private_key, public_key = generate_rsa_keypair()
+        print("Keys generated")
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -234,26 +294,30 @@ def main():
                     with conn:
                         print(f"Connected by {addr}")
 
-                        # Receive metadata length (4 bytes)
-                        metadata_len_bytes = conn.recv(4)
-                        if not metadata_len_bytes:
-                            continue
+                        # Exchange keys if encryption is enabled
+                        client_public_key = None
+                        if ENABLE_ENCRYPTION:
+                            print("Exchanging encryption keys...")
+                            client_public_key = exchange_keys(conn, public_key)
+                            print("Secure connection established")
 
+                        # Receive metadata length (4 bytes)
+                        metadata_len_bytes = recv_exact(conn, 4)
                         metadata_len = int.from_bytes(metadata_len_bytes, 'big')
 
                         # Receive metadata
-                        metadata_json = conn.recv(metadata_len)
+                        metadata_json = recv_exact(conn, metadata_len)
                         metadata = json.loads(metadata_json.decode('utf-8'))
 
                         # Handle based on type
                         transfer_type = metadata.get('type', 'message')
 
                         if transfer_type == 'file':
-                            receive_file(conn, metadata, output_dir)
+                            receive_file(conn, metadata, output_dir, private_key)
                         elif transfer_type == 'directory':
-                            receive_directory(conn, metadata, output_dir)
+                            receive_directory(conn, metadata, output_dir, private_key)
                         elif transfer_type == 'message':
-                            receive_message(metadata)
+                            receive_message(conn, metadata, private_key)
 
                         print("Waiting for connection...")
 

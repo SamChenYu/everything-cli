@@ -24,6 +24,16 @@ AES_KEY_SIZE = 32  # AES-256 (32 bytes = 256 bits)
 PORT = 9999  # Must match receiver port
 BUFFER_SIZE = 4096
 
+def recv_exact(sock, num_bytes):
+    """Receive exactly num_bytes from socket"""
+    data = b''
+    while len(data) < num_bytes:
+        chunk = sock.recv(num_bytes - len(data))
+        if not chunk:
+            raise ConnectionError("Socket connection closed")
+        data += chunk
+    return data
+
 def generate_rsa_keypair():
     """Generate RSA public/private key pair"""
     private_key = rsa.generate_private_key(
@@ -53,8 +63,8 @@ def exchange_keys(sock, my_public_key):
     sock.sendall(my_public_bytes)
 
     # Receive server's public key
-    server_key_len = int.from_bytes(sock.recv(4), 'big')
-    server_public_bytes = sock.recv(server_key_len)
+    server_key_len = int.from_bytes(recv_exact(sock, 4), 'big')
+    server_public_bytes = recv_exact(sock, server_key_len)
     server_public_key = deserialize_public_key(server_public_bytes)
 
     return server_public_key
