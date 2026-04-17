@@ -24,6 +24,7 @@ AES_KEY_SIZE = 32  # AES-256 (32 bytes = 256 bits)
 HOST = '0.0.0.0'  # Listen on all interfaces
 PORT = 9999       # Port to listen on
 BUFFER_SIZE = 4096
+DEBUG_MODE = False  # Set to True to show raw unencrypted data
 
 def recv_exact(sock, num_bytes):
     """Receive exactly num_bytes from socket"""
@@ -146,6 +147,9 @@ def receive_file(conn, metadata, output_dir, private_key=None):
     if encrypted:
         print("  (encrypted)")
 
+    if DEBUG_MODE:
+        print(f"[DEBUG] File metadata: {metadata}")
+
     # Receive all data first
     data = b''
     bytes_received = 0
@@ -162,7 +166,11 @@ def receive_file(conn, metadata, output_dir, private_key=None):
     # Decrypt if needed
     if encrypted and private_key:
         print("Decrypting file...")
+        if DEBUG_MODE:
+            print(f"[DEBUG] Encrypted file size: {len(data)} bytes")
         data = decrypt_large_data(data, private_key)
+        if DEBUG_MODE:
+            print(f"[DEBUG] Decrypted file size: {len(data)} bytes")
 
     # Save file
     with open(filepath, 'wb') as f:
@@ -185,6 +193,9 @@ def receive_directory(conn, metadata, output_dir, private_key=None):
     if encrypted:
         print("  (encrypted)")
 
+    if DEBUG_MODE:
+        print(f"[DEBUG] Directory metadata: {metadata}")
+
     # Receive all data first
     data = b''
     bytes_received = 0
@@ -201,7 +212,11 @@ def receive_directory(conn, metadata, output_dir, private_key=None):
     # Decrypt if needed
     if encrypted and private_key:
         print("Decrypting directory...")
+        if DEBUG_MODE:
+            print(f"[DEBUG] Encrypted zip size: {len(data)} bytes")
         data = decrypt_large_data(data, private_key)
+        if DEBUG_MODE:
+            print(f"[DEBUG] Decrypted zip size: {len(data)} bytes")
 
     # Save decrypted zip
     with open(temp_zip, 'wb') as f:
@@ -231,24 +246,40 @@ def receive_message(conn, metadata, private_key):
     message_size = metadata['size']
     encrypted = metadata.get('encrypted', False)
 
+    if DEBUG_MODE:
+        print(f"[DEBUG] Receiving message: {message_size} bytes, encrypted={encrypted}")
+
     # Receive message data
     message_data = recv_exact(conn, message_size)
+
+    if DEBUG_MODE and encrypted:
+        print(f"[DEBUG] Encrypted data ({len(message_data)} bytes): {message_data[:100]}...")
 
     # Decrypt if needed
     if encrypted and private_key:
         decrypted_bytes = decrypt_with_rsa(message_data, private_key)
         message = decrypted_bytes.decode('utf-8')
+        if DEBUG_MODE:
+            print(f"[DEBUG] Decrypted message: {message}")
     else:
         message = message_data.decode('utf-8')
+        if DEBUG_MODE:
+            print(f"[DEBUG] Raw message: {message}")
 
     print(f"Received: {message}\n")
 
 def main():
+    global DEBUG_MODE
+
     parser = argparse.ArgumentParser(description='Receive messages or files over TCP')
     parser.add_argument('--output', '-o', metavar='DIR',
                         help='Output directory for received files (default: Desktop)')
+    parser.add_argument('--debug', '-d', action='store_true', help='Enable debug mode (show raw unencrypted data)')
 
     args = parser.parse_args()
+
+    # Set debug mode
+    DEBUG_MODE = args.debug
 
     # Set output directory (default to Desktop)
     output_dir = args.output if args.output else get_desktop_path()
@@ -267,6 +298,9 @@ def main():
         print("Generating encryption keys...")
         private_key, public_key = generate_rsa_keypair()
         print("Keys generated")
+
+    if DEBUG_MODE:
+        print("[DEBUG MODE ENABLED - Raw data will be shown]")
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -297,17 +331,25 @@ def main():
                         # Exchange keys if encryption is enabled
                         client_public_key = None
                         if ENABLE_ENCRYPTION:
-                            print("Exchanging encryption keys...")
+                            if DEBUG_MODE:
+                                print("Exchanging encryption keys...")
                             client_public_key = exchange_keys(conn, public_key)
-                            print("Secure connection established")
+                            if DEBUG_MODE:
+                                print("Secure connection established")
 
                         # Receive metadata length (4 bytes)
                         metadata_len_bytes = recv_exact(conn, 4)
                         metadata_len = int.from_bytes(metadata_len_bytes, 'big')
 
+                        if DEBUG_MODE:
+                            print(f"[DEBUG] Metadata length: {metadata_len} bytes")
+
                         # Receive metadata
                         metadata_json = recv_exact(conn, metadata_len)
                         metadata = json.loads(metadata_json.decode('utf-8'))
+
+                        if DEBUG_MODE:
+                            print(f"[DEBUG] Metadata: {metadata}")
 
                         # Handle based on type
                         transfer_type = metadata.get('type', 'message')
@@ -319,12 +361,23 @@ def main():
                         elif transfer_type == 'message':
                             receive_message(conn, metadata, private_key)
 
+                        # Shutdown connection gracefully
+                        try:
+                            conn.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
+
                         print("Waiting for connection...")
 
                 except socket.timeout:
                     continue  # No connection, keep waiting
         except KeyboardInterrupt:
-            print("\nServer stopped.")
+            print("\nShutting down server...")
+            try:
+                s.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            print("Server stopped.")
 
 if __name__ == "__main__":
     main()

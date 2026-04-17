@@ -23,6 +23,7 @@ AES_KEY_SIZE = 32  # AES-256 (32 bytes = 256 bits)
 
 PORT = 9999  # Must match receiver port
 BUFFER_SIZE = 4096
+DEBUG_MODE = False  # Set to True to show raw unencrypted data
 
 def recv_exact(sock, num_bytes):
     """Receive exactly num_bytes from socket"""
@@ -111,15 +112,21 @@ def send_file(host, filepath, private_key=None, public_key=None):
     filename = os.path.basename(filepath)
     filesize = os.path.getsize(filepath)
 
+    if DEBUG_MODE:
+        print(f"[DEBUG] Sending file: {filename}")
+        print(f"[DEBUG] Original file size: {filesize} bytes")
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((host, PORT))
 
         # Exchange keys if encryption is enabled
         server_public_key = None
         if ENABLE_ENCRYPTION:
-            print("Exchanging encryption keys...")
+            if DEBUG_MODE:
+                print("Exchanging encryption keys...")
             server_public_key = exchange_keys(s, public_key)
-            print("Secure connection established")
+            if DEBUG_MODE:
+                print("Secure connection established")
 
         # Read file data
         with open(filepath, 'rb') as f:
@@ -131,6 +138,8 @@ def send_file(host, filepath, private_key=None, public_key=None):
             encrypted_data = encrypt_large_data(file_data, server_public_key)
             data_to_send = encrypted_data
             actual_size = len(encrypted_data)
+            if DEBUG_MODE:
+                print(f"[DEBUG] Encrypted file size: {actual_size} bytes")
         else:
             data_to_send = file_data
             actual_size = filesize
@@ -144,6 +153,10 @@ def send_file(host, filepath, private_key=None, public_key=None):
             'encrypted': ENABLE_ENCRYPTION
         }
         metadata_json = json.dumps(metadata).encode('utf-8')
+
+        if DEBUG_MODE:
+            print(f"[DEBUG] Metadata: {metadata}")
+
         s.sendall(len(metadata_json).to_bytes(4, 'big'))
         s.sendall(metadata_json)
 
@@ -186,15 +199,21 @@ def send_directory(host, dirpath, private_key=None, public_key=None):
 
         original_size = os.path.getsize(tmp_zip_path)
 
+        if DEBUG_MODE:
+            print(f"[DEBUG] Sending directory: {dirname}")
+            print(f"[DEBUG] Original zip size: {original_size} bytes")
+
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((host, PORT))
 
             # Exchange keys if encryption is enabled
             server_public_key = None
             if ENABLE_ENCRYPTION:
-                print("Exchanging encryption keys...")
+                if DEBUG_MODE:
+                    print("Exchanging encryption keys...")
                 server_public_key = exchange_keys(s, public_key)
-                print("Secure connection established")
+                if DEBUG_MODE:
+                    print("Secure connection established")
 
             # Read zip data
             with open(tmp_zip_path, 'rb') as f:
@@ -206,6 +225,8 @@ def send_directory(host, dirpath, private_key=None, public_key=None):
                 encrypted_data = encrypt_large_data(zip_data, server_public_key)
                 data_to_send = encrypted_data
                 actual_size = len(encrypted_data)
+                if DEBUG_MODE:
+                    print(f"[DEBUG] Encrypted zip size: {actual_size} bytes")
             else:
                 data_to_send = zip_data
                 actual_size = original_size
@@ -220,6 +241,10 @@ def send_directory(host, dirpath, private_key=None, public_key=None):
                 'encrypted': ENABLE_ENCRYPTION
             }
             metadata_json = json.dumps(metadata).encode('utf-8')
+
+            if DEBUG_MODE:
+                print(f"[DEBUG] Metadata: {metadata}")
+
             s.sendall(len(metadata_json).to_bytes(4, 'big'))
             s.sendall(metadata_json)
 
@@ -248,6 +273,8 @@ def send_message(host, private_key=None, public_key=None):
     print(f"Connected to {host}:{PORT}")
     if ENABLE_ENCRYPTION:
         print("Encryption enabled")
+    if DEBUG_MODE:
+        print("[DEBUG MODE ENABLED - Raw data will be shown]")
     print("Type your messages (Ctrl+C to quit)\n")
 
     try:
@@ -265,10 +292,16 @@ def send_message(host, private_key=None, public_key=None):
                     # Prepare message
                     message_bytes = message.encode('utf-8')
 
+                    if DEBUG_MODE:
+                        print(f"[DEBUG] Raw message: {message}")
+                        print(f"[DEBUG] Message bytes ({len(message_bytes)}): {message_bytes[:100]}...")
+
                     # Encrypt if enabled
                     if ENABLE_ENCRYPTION:
                         encrypted_message = encrypt_with_rsa(message_bytes, server_public_key)
                         data_to_send = encrypted_message
+                        if DEBUG_MODE:
+                            print(f"[DEBUG] Encrypted size: {len(encrypted_message)} bytes")
                     else:
                         data_to_send = message_bytes
 
@@ -279,6 +312,10 @@ def send_message(host, private_key=None, public_key=None):
                         'encrypted': ENABLE_ENCRYPTION
                     }
                     metadata_json = json.dumps(metadata).encode('utf-8')
+
+                    if DEBUG_MODE:
+                        print(f"[DEBUG] Metadata: {metadata}")
+
                     s.sendall(len(metadata_json).to_bytes(4, 'big'))
                     s.sendall(metadata_json)
 
@@ -291,11 +328,17 @@ def send_message(host, private_key=None, public_key=None):
         print("\nDisconnected.")
 
 def main():
+    global DEBUG_MODE
+
     parser = argparse.ArgumentParser(description='Send messages or files over TCP')
     parser.add_argument('--file', '-f', metavar='PATH', help='Send a file or directory')
     parser.add_argument('--host', '-H', help='IP address of receiver (if not specified, will prompt)')
+    parser.add_argument('--debug', '-d', action='store_true', help='Enable debug mode (show raw unencrypted data)')
 
     args = parser.parse_args()
+
+    # Set debug mode
+    DEBUG_MODE = args.debug
 
     # Generate RSA key pair if encryption is enabled
     private_key = None
