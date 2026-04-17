@@ -5,9 +5,10 @@ Secure TCP messenger and file transfer tool with end-to-end encryption. Send enc
 ## Features
 
 - **End-to-end encryption** using RSA-2048 + AES-256
+- **Bidirectional chat** with real-time two-way messaging
 - Send text messages between computers
-- Send individual files
-- Send entire directories (automatically zipped)
+- Send files and directories during chat sessions
+- One-way transfer mode for simple file/message sending
 - Cross-platform support (Windows, macOS, Linux)
 - Debug mode to inspect raw data
 - Received files default to Desktop location
@@ -24,12 +25,85 @@ All data is encrypted by default using hybrid encryption:
 
 1. Install dependencies:
 ```bash
-pip install cryptography
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements
 ```
 
 2. Clone or download the scripts
 
 ## Usage
+
+### Bidirectional Chat (bidirectional.py)
+
+The bidirectional chat allows both parties to send and receive messages and files simultaneously in real-time.
+
+#### Start as host (listen for connections):
+
+```bash
+./bidirectional.py
+```
+
+This will:
+- Generate RSA encryption keys
+- Display the host's IP address
+- Listen for incoming connections on port 9999
+- Wait for someone to connect
+
+#### Connect to a host:
+
+```bash
+./bidirectional.py --connect 192.168.1.100
+```
+
+Or using the short flag:
+
+```bash
+./bidirectional.py -c 192.168.1.100
+```
+
+Once connected, both parties can:
+- Send text messages in real-time
+- Send files with `/file <path>`
+- Send directories with `/dir <path>`
+- Type `/help` to see available commands
+
+**Options:**
+- `--connect HOST` or `-c HOST`: Connect to specified host IP address
+- `--port PORT` or `-p PORT`: Use custom port (default: 9999)
+- `--output DIR` or `-o DIR`: Specify directory for received files (default: Desktop)
+- `--debug` or `-d`: Enable debug mode
+
+**In-Chat Commands:**
+```
+/file ~/Documents/report.pdf   - Send a file
+/dir ~/Projects/myapp          - Send a directory
+/help                          - Show help
+```
+
+**Example Session:**
+
+```bash
+# Machine 1 (host)
+./bidirectional.py
+# Shows: Server IP Address: 192.168.1.100
+
+# Machine 2 (connect)
+./bidirectional.py -c 192.168.1.100
+```
+
+Once connected:
+```
+You: Hello!
+Peer: Hi there!
+You: /file report.pdf
+[FILE SENT] report.pdf (1024 bytes)
+Peer: Thanks, got it!
+```
+
+### One-Way Transfer Mode
+
+For simple one-way message/file sending without bidirectional chat, use the original scripts:
 
 ### Receiving (Server)
 
@@ -121,7 +195,31 @@ Debug output includes:
 
 ## Examples
 
-**Scenario 1:** Send an encrypted photo to another computer
+**Scenario 1:** Real-time chat between two computers
+
+```bash
+# Computer 1 (host)
+./bidirectional.py
+
+# Computer 2 (connect to the IP shown by Computer 1)
+./bidirectional.py -c 192.168.1.100
+```
+
+Both can now chat and send files in real-time.
+
+**Scenario 2:** Send files during a chat session
+
+```bash
+# In the chat window
+You: Hey, check out this document
+You: /file ~/Documents/report.pdf
+[FILE SENT] report.pdf (52480 bytes)
+You: /dir ~/Projects/website
+[DIRECTORY SENT] website (1048576 bytes)
+Peer: Got them, thanks!
+```
+
+**Scenario 3:** One-way file transfer (no chat needed)
 
 ```bash
 # On receiving computer
@@ -131,7 +229,7 @@ python3 receive.py
 python3 send.py -f ~/Pictures/photo.jpg
 ```
 
-**Scenario 2:** Send an encrypted project directory
+**Scenario 4:** One-way encrypted project directory transfer
 
 ```bash
 # On receiving computer
@@ -141,26 +239,16 @@ python3 receive.py -o ~/Projects
 python3 send.py -H 192.168.1.50 -f ~/Documents/my-project
 ```
 
-**Scenario 3:** Send encrypted text messages
+**Scenario 5:** Debug mode to troubleshoot encryption
 
 ```bash
-# On receiving computer
-python3 receive.py
+# Bidirectional chat with debug
+./bidirectional.py --debug
+./bidirectional.py -c 192.168.1.100 --debug
 
-# On sending computer
-python3 send.py -H 192.168.1.100
-# Start typing encrypted messages
-```
-
-**Scenario 4:** Debug mode to troubleshoot encryption
-
-```bash
-# On receiving computer
+# One-way transfer with debug
 python3 receive.py --debug
-
-# On sending computer
 python3 send.py --host 192.168.1.100 --debug
-# See detailed encryption/decryption logs
 ```
 
 ## Configuration
@@ -180,6 +268,16 @@ PORT = 9999              # Network port
 - `cryptography` library (`pip install cryptography`)
 
 ## How It Works
+
+### Bidirectional Chat (bidirectional.py)
+
+1. **Connection**: Host listens, client connects
+2. **Key Exchange**: Both parties exchange RSA public keys
+3. **Threading**: Separate threads handle sending and receiving simultaneously
+4. **Encryption**: All messages and files encrypted with RSA-2048 + AES-256
+5. **Real-time**: Messages appear instantly, files transfer in background
+
+### One-Way Transfer (send.py / receive.py)
 
 1. **Key Exchange**: When a connection is established, both parties exchange RSA public keys
 2. **Encryption**:
