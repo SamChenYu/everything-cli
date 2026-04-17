@@ -257,7 +257,7 @@ def receive_message(conn, metadata, private_key):
 
     # Decrypt if needed
     if encrypted and private_key:
-        decrypted_bytes = decrypt_with_rsa(message_data, private_key)
+        decrypted_bytes = decrypt_large_data(message_data, private_key)
         message = decrypted_bytes.decode('utf-8')
         if DEBUG_MODE:
             print(f"[DEBUG] Decrypted message: {message}")

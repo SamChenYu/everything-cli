@@ -298,7 +298,7 @@ def send_message(host, private_key=None, public_key=None):
 
                     # Encrypt if enabled
                     if ENABLE_ENCRYPTION:
-                        encrypted_message = encrypt_with_rsa(message_bytes, server_public_key)
+                        encrypted_message = encrypt_large_data(message_bytes, server_public_key)
                         data_to_send = encrypted_message
                         if DEBUG_MODE:
                             print(f"[DEBUG] Encrypted size: {len(encrypted_message)} bytes")
