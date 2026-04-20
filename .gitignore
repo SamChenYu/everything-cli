@@ -24,8 +24,11 @@ secrets.yml
 venv/
 ENV/
 env/
+__pycache__/
 
 # Session files
 *.session
 .whatsapp-chrome-datan
 .telegram-session
+
+.idea

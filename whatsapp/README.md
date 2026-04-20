@@ -7,8 +7,9 @@ A terminal-based WhatsApp chat client that uses Playwright to read the  Whatsapp
 ```bash
 npm install
 npx playwright install chromium
-cp .env.sample .env
 ```
+
+DOM selectors live in the checked-in `.div-selectors` file (no env file needed).
 
 ## Running
 
@@ -29,4 +30,4 @@ After a successful login the session is persisted in `.whatsapp-chrome-data/` so
 
 ## Selectors
 
-WhatsApp Web uses obfuscated CSS class names that change on every deploy. All DOM selectors used by this tool are configured via environment variables in `.env` (see `.env.sample` for defaults and descriptions). If the app stops working after a WhatsApp update, inspect the page and update the selector values in your `.env`.
+WhatsApp Web uses obfuscated CSS class names that change on every deploy. All DOM selectors used by this tool are configured in the `.div-selectors` file in the project root (checked into git — these are not sensitive). If the app stops working after a WhatsApp update, either edit `.div-selectors` directly or run `npm run update-selectors` to regenerate it from a probe chat.

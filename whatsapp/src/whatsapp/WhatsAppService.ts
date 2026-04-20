@@ -1,5 +1,7 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
 import * as path from "path";
+import * as fs from "fs";
+import * as dotenv from "dotenv";
 
 export interface Chat {
   id: string;
@@ -18,6 +20,7 @@ export interface Message {
 }
 
 const SESSION_DIR = path.join(process.cwd(), ".whatsapp-chrome-data");
+const DIV_SELECTORS_PATH = path.join(process.cwd(), ".div-selectors");
 
 const TIMEOUTS = {
   CHAT_LIST_INITIAL: 15_000,
@@ -47,13 +50,32 @@ const REQUIRED_ENV_KEYS = [
 ] as const;
 
 function loadSelectors() {
+  if (!fs.existsSync(DIV_SELECTORS_PATH)) {
+    console.error("Missing .div-selectors file in project root.");
+    console.error(
+      "This file holds the WhatsApp Web DOM selectors used by the CLI.",
+    );
+    console.error(
+      "Run `npm run update-selectors` to regenerate it from a probe chat.",
+    );
+    process.exit(1);
+  }
+
+  const parsed = dotenv.parse(fs.readFileSync(DIV_SELECTORS_PATH));
+  for (const [key, value] of Object.entries(parsed)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+
   const missing = REQUIRED_ENV_KEYS.filter((key) => !process.env[key]);
   if (missing.length > 0) {
-    console.error("Missing required WhatsApp selector environment variables:");
+    console.error(
+      "Missing required WhatsApp selector variables in .div-selectors:",
+    );
     for (const key of missing) {
       console.error(`  - ${key}`);
     }
-    console.error("\nCopy .env.sample to .env and fill in all selector values.");
     process.exit(1);
   }
 
