@@ -18,7 +18,7 @@ const PROBE_MESSAGES = [
 ] as const;
 
 const SESSION_DIR = path.join(process.cwd(), ".whatsapp-chrome-data");
-const ENV_SAMPLE_PATH = path.join(process.cwd(), ".env.sample");
+const DIV_SELECTORS_PATH = path.join(process.cwd(), ".div-selectors");
 
 const FALLBACK_UNREAD_BADGE = 'span[aria-label*="unread message"]';
 const FALLBACK_QR = '[data-testid="qrcode"]';
@@ -28,19 +28,19 @@ function normalizeChatRowSelector(chatListSel: string, rowSel: string): string {
   return rowSel.startsWith(prefix) ? rowSel.slice(prefix.length) : rowSel;
 }
 
-function patchEnvSample(updates: Record<string, string>): void {
-  let text = fs.readFileSync(ENV_SAMPLE_PATH, "utf8");
+function patchDivSelectors(updates: Record<string, string>): void {
+  let text = fs.readFileSync(DIV_SELECTORS_PATH, "utf8");
   for (const [key, value] of Object.entries(updates)) {
     const re = new RegExp(
       "^(" + key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")=(.*)$",
       "m",
     );
     if (!re.test(text)) {
-      throw new Error(`Key ${key} not found in .env.sample`);
+      throw new Error(`Key ${key} not found in .div-selectors`);
     }
     text = text.replace(re, `$1=${value}`);
   }
-  fs.writeFileSync(ENV_SAMPLE_PATH, text, "utf8");
+  fs.writeFileSync(DIV_SELECTORS_PATH, text, "utf8");
 }
 
 function conversationScope(page: Page): Locator {
@@ -429,8 +429,8 @@ async function analyzeConversation(page: Page): Promise<Record<string, string>> 
 }
 
 async function main(): Promise<void> {
-  if (!fs.existsSync(ENV_SAMPLE_PATH)) {
-    console.error("Missing .env.sample in project root.");
+  if (!fs.existsSync(DIV_SELECTORS_PATH)) {
+    console.error("Missing .div-selectors in project root.");
     process.exit(1);
   }
 
@@ -543,14 +543,13 @@ async function main(): Promise<void> {
       side.chatRowSelector,
     );
 
-    patchEnvSample(partial);
+    patchDivSelectors(partial);
 
     console.log(
       [
         "",
-        "Updated .env.sample from fixture content + DOM analysis.",
+        "Updated .div-selectors from fixture content + DOM analysis.",
         "Unread badge and QR selectors were not probed (defaults kept).",
-        "Copy .env.sample → .env if you use a local env file.",
         "",
       ].join("\n"),
     );

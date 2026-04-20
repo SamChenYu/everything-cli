@@ -1,9 +1,7 @@
-# No credentials required — WhatsApp Web uses QR code login via the browser.
-# Session is persisted via a Chrome profile directory (.whatsapp-chrome-data/).
-
-# WhatsApp Web DOM Selectors
-# These selectors may change when WhatsApp updates their web interface
-# Update them if the app stops working after a WhatsApp update
+# WhatsApp Web DOM selectors used by this CLI.
+# These are not sensitive — they describe public DOM structure of web.whatsapp.com.
+# They may change when WhatsApp updates their web interface.
+# Run `npm run update-selectors` to refresh them from a probe chat.
 
 # Chat list container
 WA_CHAT_LIST_SELECTOR=[aria-label="Chat list"]

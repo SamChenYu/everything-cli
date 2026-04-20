@@ -9,7 +9,7 @@ Node.js Playwright CLI tool for WhatsApp Web (personal use). Uses Ink (React) fo
 - `src/whatsapp/WhatsAppService.ts` — Playwright automation (browser launch, DOM scraping, message sending)
 
 ## WhatsApp Web Selectors
-All DOM selectors are configurable via `.env` (see `.env.sample`). This is critical because WhatsApp Web uses obfuscated/minified CSS class names that change on every deploy.
+All DOM selectors live in `.div-selectors` (checked into git — selectors are not sensitive). `WhatsAppService.ts` parses this file at startup with `dotenv.parse` and exits if it is missing or any required `WA_*` key is unset. This indirection is critical because WhatsApp Web uses obfuscated/minified CSS class names that change on every deploy.
 
 ### Selector stability tiers
 - **Stable:** `role` attributes, `aria-label`, `contenteditable`, `data-lexical-editor`, some `data-testid` attributes (e.g. `selectable-text`, `qrcode`)
