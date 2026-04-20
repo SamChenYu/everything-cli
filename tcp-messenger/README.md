@@ -287,6 +287,62 @@ PORT = 9999              # Network port
 4. **Decryption**: Receiver decrypts the data using their private key
 5. **Save**: Decrypted files/messages are saved or displayed
 
+## Testing
+
+This project includes comprehensive unit tests for all three main components.
+
+### Running Tests
+
+Run all tests (109 total):
+```bash
+python3 run_tests.py
+```
+
+Run tests with verbose output:
+```bash
+python3 run_tests.py --verbose
+```
+
+Run specific test file:
+```bash
+python3 run_tests.py test_send.py
+python3 run_tests.py test_receive.py
+python3 run_tests.py test_bidirectional.py
+python3 run_tests.py test_security.py  # Security tests
+```
+
+Or use unittest directly:
+```bash
+python3 -m unittest discover -s . -p "test_*.py"
+```
+
+### Test Coverage
+
+**109 total tests** covering:
+- RSA key generation and serialization
+- Hybrid encryption (AES-256 + RSA-2048)
+- Socket communication and data transfer
+- File and directory transfers
+- Message sending and receiving
+- Error handling and edge cases
+- Multi-platform support
+- Thread synchronization
+- **Security vulnerabilities (buffer overflow, zip bombs, etc.)**
+
+See `TEST_DOCUMENTATION.md` for detailed test coverage information.
+
+### ⚠️ Security Findings
+
+Security testing discovered vulnerabilities:
+- 🔴 **CRITICAL:** Zip bomb vulnerability (no compression ratio validation)
+- 🟡 **MEDIUM:** No file size limits
+- 🟡 **MEDIUM:** Path traversal partially mitigated
+- 🟡 **MEDIUM:** No connection rate limiting
+
+See `SECURITY_FINDINGS.md` for complete vulnerability report and recommended fixes.
+
+**Important:** This tool is intended for trusted networks. Do not expose directly to the internet without implementing the recommended security fixes.
+
 ## Troubleshooting
 
 **Port already in use:**

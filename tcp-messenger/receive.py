@@ -9,10 +9,16 @@ import os
 import json
 import zipfile
 import platform
+import shutil
+import tempfile
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
+from security_utils import (
+    safe_extract_zip, validate_file_size, get_safe_output_path,
+    SecurityError, ZipBombError, FileSizeError, DiskSpaceError, PathTraversalError
+)
 
 # ============ ENCRYPTION SETTINGS ============
 ENABLE_ENCRYPTION = True  # Set to False to disable encryption
@@ -134,14 +140,19 @@ def receive_file(conn, metadata, output_dir, private_key=None):
     filesize = metadata['filesize']
     encrypted = metadata.get('encrypted', False)
 
-    filepath = os.path.join(output_dir, filename)
+    # Validate file size before receiving
+    try:
+        validate_file_size(filesize, output_dir)
+    except (FileSizeError, DiskSpaceError) as e:
+        print(f"Error: {e}")
+        raise
 
-    # Handle duplicate filenames
-    base, ext = os.path.splitext(filepath)
-    counter = 1
-    while os.path.exists(filepath):
-        filepath = f"{base}_{counter}{ext}"
-        counter += 1
+    # Get safe output path
+    try:
+        filepath = get_safe_output_path(output_dir, filename)
+    except (PathTraversalError, ValueError) as e:
+        print(f"Error: Invalid filename - {e}")
+        raise
 
     print(f"Receiving file: {filename} ({filesize} bytes)")
     if encrypted:
@@ -186,6 +197,13 @@ def receive_directory(conn, metadata, output_dir, private_key=None):
     original_dirname = metadata.get('original_dirname', 'received_directory')
     encrypted = metadata.get('encrypted', False)
 
+    # Validate file size before receiving
+    try:
+        validate_file_size(filesize, output_dir)
+    except (FileSizeError, DiskSpaceError) as e:
+        print(f"Error: {e}")
+        raise
+
     # Save zip to temporary location
     temp_zip = os.path.join(output_dir, filename)
 
@@ -222,24 +240,53 @@ def receive_directory(conn, metadata, output_dir, private_key=None):
     with open(temp_zip, 'wb') as f:
         f.write(data)
 
-    print(f"Extracting directory...")
+    print(f"Validating and extracting directory...")
 
-    # Extract zip
-    extract_path = os.path.join(output_dir, original_dirname)
+    try:
+        # Determine target path, auto-suffixing if it already exists
+        extract_path = os.path.join(output_dir, original_dirname)
+        counter = 1
+        while os.path.exists(extract_path):
+            extract_path = os.path.join(output_dir, f"{original_dirname}_{counter}")
+            counter += 1
 
-    # Handle duplicate directory names
-    counter = 1
-    while os.path.exists(extract_path):
-        extract_path = os.path.join(output_dir, f"{original_dirname}_{counter}")
-        counter += 1
+        # Extract into a staging dir so we can rename to the unique target
+        staging_dir = tempfile.mkdtemp(dir=output_dir, prefix='.extract_')
+        try:
+            extracted_size = safe_extract_zip(temp_zip, staging_dir)
 
-    with zipfile.ZipFile(temp_zip, 'r') as zipf:
-        zipf.extractall(output_dir)
+            if DEBUG_MODE:
+                print(f"[DEBUG] Extracted {extracted_size:,} bytes")
 
-    # Remove temporary zip file
-    os.remove(temp_zip)
+            staging_contents = os.listdir(staging_dir)
+            if (len(staging_contents) == 1
+                    and os.path.isdir(os.path.join(staging_dir, staging_contents[0]))):
+                shutil.move(os.path.join(staging_dir, staging_contents[0]), extract_path)
+            else:
+                os.makedirs(extract_path)
+                for item in staging_contents:
+                    shutil.move(os.path.join(staging_dir, item),
+                                os.path.join(extract_path, item))
+        finally:
+            if os.path.exists(staging_dir):
+                shutil.rmtree(staging_dir, ignore_errors=True)
 
-    print(f"Directory saved to: {extract_path}\n")
+        print(f"Directory saved to: {extract_path}")
+
+    except ZipBombError as e:
+        print(f"\n⚠️  ZIP BOMB DETECTED: {e}")
+        print("Transfer rejected for security reasons.")
+        raise
+    except (FileSizeError, PathTraversalError) as e:
+        print(f"\n⚠️  SECURITY ERROR: {e}")
+        print("Transfer rejected for security reasons.")
+        raise
+    finally:
+        # Always remove temporary zip file
+        if os.path.exists(temp_zip):
+            os.remove(temp_zip)
+
+    print()
 
 def receive_message(conn, metadata, private_key):
     """Process a received text message"""

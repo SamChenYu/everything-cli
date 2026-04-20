@@ -24,6 +24,7 @@ secrets.yml
 venv/
 ENV/
 env/
+__pycache__/
 
 # Session files
 *.session

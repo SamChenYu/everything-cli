@@ -13,10 +13,15 @@ import os
 import tempfile
 import zipfile
 import platform
+import shutil
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
+from security_utils import (
+    safe_extract_zip, validate_file_size, get_safe_output_path,
+    SecurityError, ZipBombError, FileSizeError, DiskSpaceError, PathTraversalError
+)
 
 ENABLE_ENCRYPTION = True
 RSA_KEY_SIZE = 2048
@@ -337,25 +342,30 @@ class BidirectionalChat:
         filesize = metadata['filesize']
         encrypted = metadata.get('encrypted', False)
 
-        filepath = os.path.join(self.output_dir, filename)
+        try:
+            # Validate file size
+            validate_file_size(filesize, self.output_dir)
 
-        base, ext = os.path.splitext(filepath)
-        counter = 1
-        while os.path.exists(filepath):
-            filepath = f"{base}_{counter}{ext}"
-            counter += 1
+            # Get safe output path
+            filepath = get_safe_output_path(self.output_dir, filename)
 
-        data = self.recv_exact(self.connection, filesize)
+            # Receive data
+            data = self.recv_exact(self.connection, filesize)
 
-        if encrypted and self.private_key:
-            data = self.decrypt_large_data(data)
+            if encrypted and self.private_key:
+                data = self.decrypt_large_data(data)
 
-        with open(filepath, 'wb') as f:
-            f.write(data)
+            with open(filepath, 'wb') as f:
+                f.write(data)
 
-        with self.input_lock:
-            print(f"\r\033[K[FILE RECEIVED] {filename} -> {filepath}")
-            print(f"You: ", end='', flush=True)
+            with self.input_lock:
+                print(f"\r\033[K[FILE RECEIVED] {filename} -> {filepath}")
+                print(f"You: ", end='', flush=True)
+
+        except (FileSizeError, DiskSpaceError, PathTraversalError, SecurityError) as e:
+            with self.input_lock:
+                print(f"\r\033[K[ERROR] File rejected: {e}")
+                print(f"You: ", end='', flush=True)
 
     def receive_directory(self, metadata):
         filename = metadata['filename']
@@ -365,28 +375,61 @@ class BidirectionalChat:
 
         temp_zip = os.path.join(self.output_dir, filename)
 
-        data = self.recv_exact(self.connection, filesize)
+        try:
+            # Validate file size
+            validate_file_size(filesize, self.output_dir)
 
-        if encrypted and self.private_key:
-            data = self.decrypt_large_data(data)
+            # Receive data
+            data = self.recv_exact(self.connection, filesize)
 
-        with open(temp_zip, 'wb') as f:
-            f.write(data)
+            if encrypted and self.private_key:
+                data = self.decrypt_large_data(data)
 
-        extract_path = os.path.join(self.output_dir, original_dirname)
-        counter = 1
-        while os.path.exists(extract_path):
-            extract_path = os.path.join(self.output_dir, f"{original_dirname}_{counter}")
-            counter += 1
+            with open(temp_zip, 'wb') as f:
+                f.write(data)
 
-        with zipfile.ZipFile(temp_zip, 'r') as zipf:
-            zipf.extractall(self.output_dir)
+            # Determine target path, auto-suffixing if it already exists
+            extract_path = os.path.join(self.output_dir, original_dirname)
+            counter = 1
+            while os.path.exists(extract_path):
+                extract_path = os.path.join(self.output_dir, f"{original_dirname}_{counter}")
+                counter += 1
 
-        os.remove(temp_zip)
+            # Extract into a staging dir so we can rename to the unique target
+            staging_dir = tempfile.mkdtemp(dir=self.output_dir, prefix='.extract_')
+            try:
+                safe_extract_zip(temp_zip, staging_dir)
 
-        with self.input_lock:
-            print(f"\r\033[K[DIRECTORY RECEIVED] {original_dirname} -> {extract_path}")
-            print(f"You: ", end='', flush=True)
+                staging_contents = os.listdir(staging_dir)
+                if (len(staging_contents) == 1
+                        and os.path.isdir(os.path.join(staging_dir, staging_contents[0]))):
+                    shutil.move(os.path.join(staging_dir, staging_contents[0]), extract_path)
+                else:
+                    os.makedirs(extract_path)
+                    for item in staging_contents:
+                        shutil.move(os.path.join(staging_dir, item),
+                                    os.path.join(extract_path, item))
+            finally:
+                if os.path.exists(staging_dir):
+                    shutil.rmtree(staging_dir, ignore_errors=True)
+
+            with self.input_lock:
+                print(f"\r\033[K[DIRECTORY RECEIVED] {original_dirname} -> {extract_path}")
+                print(f"You: ", end='', flush=True)
+
+        except ZipBombError as e:
+            with self.input_lock:
+                print(f"\r\033[K[ZIP BOMB DETECTED] {e}")
+                print("Transfer rejected for security reasons.")
+                print(f"You: ", end='', flush=True)
+        except (FileSizeError, DiskSpaceError, PathTraversalError, SecurityError) as e:
+            with self.input_lock:
+                print(f"\r\033[K[SECURITY ERROR] {e}")
+                print(f"You: ", end='', flush=True)
+        finally:
+            # Always remove temporary zip file
+            if os.path.exists(temp_zip):
+                os.remove(temp_zip)
 
     def send_messages(self):
         print("\n--- Commands ---")
