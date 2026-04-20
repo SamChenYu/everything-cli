@@ -21,7 +21,7 @@ Messages are scraped via the `data-pre-plain-text` attribute on message elements
 
 ### Known broken selectors (as of March 2026)
 - `[data-testid="conversation-panel-messages"]` — no longer exists. Removed; we now wait for `[data-pre-plain-text]` elements directly.
-- `.message-out` — used for outgoing message detection, may be obfuscated. Has a fallback: checks `data-id` attribute prefix (`true_` = outgoing).
+- `data-id` direction prefixes (`true_` outgoing / `false_` incoming) — gone. Modern WhatsApp Web uses raw hex ids like `3EB0…` with no direction info baked in. Direction is now detected by looking for a `.message-out` (or `.message-in`) class on a descendant of the wrapper. The `WA_MESSAGE_OUTGOING_INDICATOR` selector in `.div-selectors` (default `div.message-out`) controls this.
 
 ## Gotchas
 - Media messages (images, stickers, voice notes) have `data-pre-plain-text` but no `span[data-testid="selectable-text"]` inside. The `textContent()` call uses a 1-second timeout to fail fast and show "(media)".
