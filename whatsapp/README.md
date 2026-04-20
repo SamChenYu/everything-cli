@@ -30,4 +30,4 @@ After a successful login the session is persisted in `.whatsapp-chrome-data/` so
 
 ## Selectors
 
-WhatsApp Web uses obfuscated CSS class names that change on every deploy. All DOM selectors used by this tool are configured in the `.div-selectors` file in the project root (checked into git — these are not sensitive). If the app stops working after a WhatsApp update, either edit `.div-selectors` directly or run `npm run update-selectors` to regenerate it from a probe chat.
+WhatsApp Web uses obfuscated CSS class names that change on every deploy. All DOM selectors used by this tool are configured in the `.div-selectors` file in the project root (checked into git — these are not sensitive). If the app stops working after a WhatsApp update, run `npm run check-selectors` — it opens WhatsApp Web, runs every selector against the live DOM, and prints a focused HTML snippet for any that no longer match so you can update them by hand.

@@ -56,7 +56,7 @@ function loadSelectors() {
       "This file holds the WhatsApp Web DOM selectors used by the CLI.",
     );
     console.error(
-      "Run `npm run update-selectors` to regenerate it from a probe chat.",
+      "Run `npm run check-selectors` to see which selectors are broken.",
     );
     process.exit(1);
   }

@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "tsx src/index.tsx",
     "dev": "tsx src/index.tsx --no-headless",
-    "update-selectors": "tsx src/update-selectors.ts"
+    "check-selectors": "tsx src/check-selectors.ts"
   },
   "keywords": [],
   "author": "",

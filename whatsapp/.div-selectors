@@ -1,7 +1,10 @@
 # WhatsApp Web DOM selectors used by this CLI.
 # These are not sensitive — they describe public DOM structure of web.whatsapp.com.
 # They may change when WhatsApp updates their web interface.
-# Run `npm run update-selectors` to refresh them from a probe chat.
+#
+# When the CLI breaks, run `npm run check-selectors` — it opens WhatsApp Web,
+# tests every selector below against the live DOM, and prints a focused HTML
+# snippet for any that no longer match so you can update them by hand.
 
 # Chat list container
 WA_CHAT_LIST_SELECTOR=[aria-label="Chat list"]
