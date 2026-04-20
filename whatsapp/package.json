@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "tsx src/index.tsx",
-    "dev": "tsx src/index.tsx --no-headless"
+    "dev": "tsx src/index.tsx --no-headless",
+    "update-selectors": "tsx src/update-selectors.ts"
   },
   "keywords": [],
   "author": "",
