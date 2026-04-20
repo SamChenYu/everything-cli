@@ -12,8 +12,10 @@ WA_CHAT_ROW_SELECTOR=div[role="row"]
 # Unread message badge inside a chat row
 WA_CHAT_UNREAD_BADGE_SELECTOR=span[aria-label*="unread message"]
 
-# Message wrapper (every message — text and media — has a data-id attribute)
-WA_MESSAGE_WRAPPER_SELECTOR=div[data-id^="3EB0"], div[data-id^="true_"]
+# Message wrapper (every text/media message in #main has data-id and contains a
+# .message-in or .message-out descendant; system rows like the encryption
+# notice or group-profile card don't, so :has() filters them out)
+WA_MESSAGE_WRAPPER_SELECTOR="#main div[data-id]:has(div.message-in, div.message-out)"
 
 # Metadata element inside a message (present on text messages, absent on media-only)
 WA_MESSAGE_META_SELECTOR=[data-pre-plain-text]
@@ -24,8 +26,10 @@ WA_MESSAGE_META_ATTR=data-pre-plain-text
 # Message text selector
 WA_MESSAGE_TEXT_SELECTOR=[data-testid="selectable-text"]
 
-# Prefix in the wrapper's data-id value that indicates an outgoing message
-WA_MESSAGE_OUTGOING_PREFIX=3EB0
+# Selector that matches outgoing messages only (relative to a wrapper).
+# WhatsApp marks outgoing bubbles with a `message-out` class on a descendant
+# of the wrapper. Direction is detected by `wrapper.locator(this).count() > 0`.
+WA_MESSAGE_OUTGOING_INDICATOR=div.message-out
 
 # QR code selector
 WA_QR_CODE_SELECTOR=[data-testid="qrcode"]
@@ -33,5 +37,6 @@ WA_QR_CODE_SELECTOR=[data-testid="qrcode"]
 # Message input box selector (Lexical editor)
 WA_INPUT_BOX_SELECTOR=div[role="textbox"][data-lexical-editor="true"][aria-placeholder="Type a message"]
 
-# Send button selector (aria-label is locale-dependent)
-WA_SEND_BUTTON_SELECTOR=[aria-label="Voice message"]
+# Send button selector (aria-label is locale-dependent, only visible while the
+# composer has text — when empty, the same slot shows the Voice-message button)
+WA_SEND_BUTTON_SELECTOR=[aria-label="Send"]

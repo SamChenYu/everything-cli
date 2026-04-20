@@ -43,7 +43,7 @@ const REQUIRED_ENV_KEYS = [
   "WA_MESSAGE_META_SELECTOR",
   "WA_MESSAGE_META_ATTR",
   "WA_MESSAGE_TEXT_SELECTOR",
-  "WA_MESSAGE_OUTGOING_PREFIX",
+  "WA_MESSAGE_OUTGOING_INDICATOR",
   "WA_QR_CODE_SELECTOR",
   "WA_INPUT_BOX_SELECTOR",
   "WA_SEND_BUTTON_SELECTOR",
@@ -87,7 +87,7 @@ function loadSelectors() {
     MESSAGE_META: process.env.WA_MESSAGE_META_SELECTOR!,
     MESSAGE_META_ATTR: process.env.WA_MESSAGE_META_ATTR!,
     MESSAGE_TEXT: process.env.WA_MESSAGE_TEXT_SELECTOR!,
-    OUTGOING_PREFIX: process.env.WA_MESSAGE_OUTGOING_PREFIX!,
+    OUTGOING_INDICATOR: process.env.WA_MESSAGE_OUTGOING_INDICATOR!,
     QR_CODE: process.env.WA_QR_CODE_SELECTOR!,
     INPUT_BOX: process.env.WA_INPUT_BOX_SELECTOR!,
     SEND_BUTTON: process.env.WA_SEND_BUTTON_SELECTOR!,
@@ -308,8 +308,8 @@ export class WhatsAppService {
     for (let i = startIndex; i < totalCount; i++) {
       const wrapper = wrapperEls.nth(i);
 
-      const dataId = await wrapper.getAttribute("data-id") ?? "";
-      const isFromMe = dataId.startsWith(SELECTORS.OUTGOING_PREFIX);
+      const isFromMe =
+        (await wrapper.locator(SELECTORS.OUTGOING_INDICATOR).count()) > 0;
 
       const metaEl = wrapper.locator(SELECTORS.MESSAGE_META).first();
       const hasMeta = (await metaEl.count()) > 0;

@@ -28,6 +28,18 @@ function normalizeChatRowSelector(chatListSel: string, rowSel: string): string {
   return rowSel.startsWith(prefix) ? rowSel.slice(prefix.length) : rowSel;
 }
 
+/**
+ * dotenv treats `#` in an unquoted value as the start of an inline comment, so
+ * a CSS id selector like `#main …` would parse as the empty string. Wrap any
+ * value that contains `#`, leading/trailing whitespace, or no characters at
+ * all in double quotes (escaping any embedded `"`) to keep dotenv happy.
+ */
+function formatEnvValue(value: string): string {
+  const needsQuoting = /^$|^\s|\s$|#/.test(value);
+  if (!needsQuoting) return value;
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
 function patchDivSelectors(updates: Record<string, string>): void {
   let text = fs.readFileSync(DIV_SELECTORS_PATH, "utf8");
   for (const [key, value] of Object.entries(updates)) {
@@ -38,7 +50,7 @@ function patchDivSelectors(updates: Record<string, string>): void {
     if (!re.test(text)) {
       throw new Error(`Key ${key} not found in .div-selectors`);
     }
-    text = text.replace(re, `$1=${value}`);
+    text = text.replace(re, `$1=${formatEnvValue(value)}`);
   }
   fs.writeFileSync(DIV_SELECTORS_PATH, text, "utf8");
 }
@@ -54,50 +66,24 @@ function messageLocator(scope: Locator, text: string): Locator {
 
 type MessageDomProbe = {
   wrapperTag: string;
-  dataIdSample: string;
+  hasMessageOut: boolean;
+  hasMessageIn: boolean;
+  hasMetaAttr: boolean;
   messageTextSelector: string;
   metaSelector: string;
   metaAttr: string;
 };
 
-function longestCommonOutgoingPrefix(ids: string[]): string {
-  if (ids.length === 0) return "true_";
-  let p = ids[0] ?? "";
-  for (const s of ids) {
-    while (p.length > 0 && !s.startsWith(p)) {
-      p = p.slice(0, -1);
-    }
-  }
-  const u = p.lastIndexOf("_");
-  if (u >= 0) return p.slice(0, u + 1);
-  return p.length > 0 ? p : "true_";
-}
-
-async function findAlternateIdPrefixInMain(
-  page: Page,
-  tag: string,
-  outgoingPrefix: string,
-): Promise<string> {
-  return await page.evaluate(
-    ({ tag: t, outgoingPrefix: o }) => {
-      const main = document.querySelector("#main");
-      if (!main) return o === "true_" ? "false_" : "true_";
-      const els = main.querySelectorAll(`${t}[data-id]`);
-      for (const e of els) {
-        const id = e.getAttribute("data-id") ?? "";
-        if (id.length < 2 || id.startsWith(o)) continue;
-        if (/^(true_|false_)/.test(id)) {
-          return id.startsWith("true_") ? "true_" : "false_";
-        }
-        const idx = id.indexOf("_");
-        if (idx > 0) return id.slice(0, idx + 1);
-      }
-      return o === "true_" ? "false_" : "true_";
-    },
-    { tag, outgoingPrefix },
-  );
-}
-
+/**
+ * Walks up from the matched text node to find the closest `[data-id]` ancestor
+ * that actually wraps a chat message — i.e., one that has either
+ * `.message-out` (sent by you) or `.message-in` (sent by someone else)
+ * somewhere inside it. This deliberately ignores the `data-id` *value*:
+ * since 2024-ish WhatsApp Web uses raw hex ids (e.g. `3EB0…`) with no
+ * `true_`/`false_` direction prefix, so trying to detect direction from
+ * the id is unreliable. The `message-out` / `message-in` class names have
+ * been stable for years and are the source of truth for direction.
+ */
 async function probeMessageDom(
   page: Page,
   scope: Locator,
@@ -122,89 +108,44 @@ async function probeMessageDom(
       throw new Error("No element for message probe");
     }
 
-    const dataIdChain: Element[] = [];
+    let wrapper: Element | null = null;
     let cur: Element | null = el;
     while (cur && cur !== document.body) {
-      if (cur.hasAttribute("data-id")) {
-        dataIdChain.push(cur);
+      if (
+        cur.hasAttribute("data-id") &&
+        cur.querySelector("div.message-out, div.message-in")
+      ) {
+        wrapper = cur;
+        break;
       }
       cur = cur.parentElement;
     }
 
-    const isLikely = (id: string): boolean => {
-      if (!id || id.length < 4) return false;
-      if (/^(true_|false_)/.test(id)) return true;
-      if (/@(?:c|g)\.us\b/.test(id)) return true;
-      if (/@s\.whatsapp\.net\b/.test(id)) return true;
-      if (id.includes("_") && id.length >= 12) return true;
-      return false;
-    };
-
-    let wrapper: Element | null = null;
-    for (const node of dataIdChain) {
-      const id = node.getAttribute("data-id") ?? "";
-      if (isLikely(id)) {
-        wrapper = node;
-        break;
-      }
-    }
-    if (!wrapper && dataIdChain.length > 0) {
-      wrapper = dataIdChain[0] ?? null;
-    }
     if (!wrapper) {
-      const main = el.closest("#main");
-      if (main) {
-        const candidates = Array.from(main.querySelectorAll("[data-id]")).filter(
-          (node) => node.contains(el),
-        );
-        candidates.sort((a, b) => {
-          const da = depthIn(main, a);
-          const db = depthIn(main, b);
-          return db - da;
-        });
-        for (const node of candidates) {
-          const id = node.getAttribute("data-id") ?? "";
-          if (isLikely(id) || id.length >= 8) {
-            wrapper = node;
-            break;
-          }
-        }
-        if (!wrapper && candidates.length > 0) {
-          wrapper = candidates[0] ?? null;
-        }
-      }
-    }
-    const depthIn = (root: Element, node: Element): number => {
-      let d = 0;
-      let x: Element | null = node;
-      while (x && x !== root) {
-        d++;
-        x = x.parentElement;
-      }
-      return x === root ? d : -1;
-    };
-    if (!wrapper) {
-      const ancestorChain: { tag: string; attrs: Record<string, string> }[] = [];
+      const ancestorChain: { tag: string; attrs: Record<string, string> }[] =
+        [];
       let n: Element | null = el;
       for (let i = 0; i < 12 && n; i++, n = n.parentElement) {
         const a: Record<string, string> = {};
         for (const at of Array.from(n.attributes)) a[at.name] = at.value;
         ancestorChain.push({ tag: n.tagName.toLowerCase(), attrs: a });
       }
-      const hint =
-        dataIdChain.length === 0
-          ? "No [data-id] found anywhere around the matched text."
-          : `Found data-id ancestor(s), first id: ${(dataIdChain[0]?.getAttribute("data-id") ?? "").slice(0, 120)}`;
       throw Object.assign(
-        new Error(`Could not find a message wrapper. ${hint}`),
+        new Error(
+          "Could not find a message wrapper (no [data-id] ancestor with " +
+            ".message-in/.message-out descendant). Has WhatsApp changed " +
+            "the wrapper structure?",
+        ),
         { __debugAncestors: ancestorChain },
       );
     }
 
-    const dataId = wrapper.getAttribute("data-id") ?? "";
+    const hasMessageOut = wrapper.querySelector("div.message-out") !== null;
+    const hasMessageIn = wrapper.querySelector("div.message-in") !== null;
 
     const metaSelector = "[data-pre-plain-text]";
     const metaAttr = "data-pre-plain-text";
+    const hasMetaAttr = wrapper.querySelector(metaSelector) !== null;
 
     const textEl =
       wrapper.querySelector("[data-testid='selectable-text']") ??
@@ -221,7 +162,9 @@ async function probeMessageDom(
 
     return {
       wrapperTag: wrapper.tagName.toLowerCase(),
-      dataIdSample: dataId,
+      hasMessageOut,
+      hasMessageIn,
+      hasMetaAttr,
       messageTextSelector,
       metaSelector,
       metaAttr,
@@ -233,7 +176,7 @@ async function probeComposer(page: Page): Promise<{
   inputSelector: string;
   sendSelector: string;
 }> {
-  return await page.evaluate(() => {
+  const inputSelector = await page.evaluate(() => {
     const box =
       document.querySelector(
         'div[role="textbox"][data-lexical-editor="true"]',
@@ -244,47 +187,51 @@ async function probeComposer(page: Page): Promise<{
         "Could not find message input (Lexical / contenteditable textbox).",
       );
     }
-
-    let inputSelector = 'div[role="textbox"][data-lexical-editor="true"]';
     if (!box.hasAttribute("data-lexical-editor")) {
-      inputSelector = 'div[role="textbox"][contenteditable="true"]';
-    } else {
-      const ph = box.getAttribute("aria-placeholder");
-      if (ph) {
-        inputSelector = `div[role="textbox"][data-lexical-editor="true"][aria-placeholder="${ph.replace(/"/g, '\\"')}"]`;
-      }
+      return 'div[role="textbox"][contenteditable="true"]';
     }
-
-    const footer = box.closest('footer') ?? box.parentElement ?? document.body;
-    const buttons = Array.from(
-      footer.querySelectorAll('button, [role="button"]'),
-    ) as HTMLElement[];
-
-    let sendEl: HTMLElement | null = null;
-    for (const b of buttons) {
-      const label = (b.getAttribute("aria-label") ?? "").toLowerCase();
-      if (label.includes("send") || label.includes("enviar")) {
-        sendEl = b;
-        break;
-      }
-    }
-    if (!sendEl && buttons.length > 0) {
-      sendEl = buttons[buttons.length - 1] ?? null;
-    }
-
-    let sendSelector = '[aria-label="Send"]';
-    if (sendEl) {
-      const al = sendEl.getAttribute("aria-label");
-      if (al) {
-        sendSelector = `[aria-label="${al.replace(/"/g, '\\"')}"]`;
-      } else {
-        const tid = sendEl.getAttribute("data-testid");
-        if (tid) sendSelector = `[data-testid="${tid}"]`;
-      }
-    }
-
-    return { inputSelector, sendSelector };
+    const ph = box.getAttribute("aria-placeholder");
+    return ph
+      ? `div[role="textbox"][data-lexical-editor="true"][aria-placeholder="${ph.replace(/"/g, '\\"')}"]`
+      : 'div[role="textbox"][data-lexical-editor="true"]';
   });
+
+  // The Send button only exists while the composer has text; an empty composer
+  // shows the Voice-message button in the same slot, which is what the script
+  // would otherwise mistakenly grab. Type a single throwaway char, probe, then
+  // clear it.
+  const inputBox = page.locator(inputSelector);
+  await inputBox.click();
+  await inputBox.pressSequentially("x", { delay: 30 });
+  await page.waitForTimeout(300);
+
+  const sendSelector = await page.evaluate(() => {
+    const candidates = Array.from(
+      document.querySelectorAll('button, [role="button"]'),
+    ) as HTMLElement[];
+    for (const b of candidates) {
+      const raw = b.getAttribute("aria-label") ?? "";
+      const label = raw.toLowerCase();
+      // Match common aria-labels across locales: en "Send", es "Enviar",
+      // pt "Enviar", de "Senden", fr "Envoyer", etc. Be strict to avoid
+      // catching things like "Send a message …" placeholders.
+      if (
+        label === "send" ||
+        label === "enviar" ||
+        label === "senden" ||
+        label === "envoyer"
+      ) {
+        return `[aria-label="${raw.replace(/"/g, '\\"')}"]`;
+      }
+    }
+    return '[aria-label="Send"]';
+  });
+
+  await inputBox.click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.press("Backspace");
+
+  return { inputSelector, sendSelector };
 }
 
 type SidebarProbe = {
@@ -389,29 +336,37 @@ async function analyzeConversation(page: Page): Promise<Record<string, string>> 
 
   const w0 = probes[0]!;
   for (const p of probes) {
-    if (p.wrapperTag !== w0.wrapperTag || p.messageTextSelector !== w0.messageTextSelector) {
+    if (
+      p.wrapperTag !== w0.wrapperTag ||
+      p.messageTextSelector !== w0.messageTextSelector
+    ) {
       throw new Error(
         "Probe messages produced inconsistent DOM patterns — check that all three lines are plain outgoing text in the same thread.",
       );
     }
   }
 
+  if (!probes.every((p) => p.hasMessageOut)) {
+    throw new Error(
+      "Probe messages don't all carry the `.message-out` class. Make sure " +
+        `the three "${PROBE_CHAT_TITLE}" probe lines were sent BY YOU (not ` +
+        "received from someone else).",
+    );
+  }
+
+  if (!probes.every((p) => p.hasMetaAttr)) {
+    throw new Error(
+      "Probe messages are missing `[data-pre-plain-text]`. WhatsApp may have " +
+        "renamed this attribute — update WA_MESSAGE_META_SELECTOR / _ATTR " +
+        "manually in .div-selectors.",
+    );
+  }
+
   const tag = w0.wrapperTag;
-  const ids = probes.map((p) => p.dataIdSample);
-  const allTrue = ids.every((i) => i.startsWith("true_"));
-  const allFalse = ids.every((i) => i.startsWith("false_"));
-  let outP =
-    allTrue ? "true_" : allFalse ? "false_" : longestCommonOutgoingPrefix(ids);
-  if (!outP || outP.length < 2) {
-    outP = ids[0]?.match(/^(true_|false_)/)?.[1] ?? "true_";
-  }
-
-  let inP = await findAlternateIdPrefixInMain(page, tag, outP);
-  if (inP === outP) {
-    inP = outP === "true_" ? "false_" : "true_";
-  }
-
-  const messageWrapper = `${tag}[data-id^="${outP}"], ${tag}[data-id^="${inP}"]`;
+  // `:has(...)` filters out non-message rows under #main (encryption notice,
+  // group-profile card, "Today" date separator, etc. — they have data-id but
+  // no .message-in/.message-out descendant).
+  const messageWrapper = `#main ${tag}[data-id]:has(div.message-in, div.message-out)`;
 
   const composer = await probeComposer(page);
 
@@ -420,7 +375,7 @@ async function analyzeConversation(page: Page): Promise<Record<string, string>> 
     WA_MESSAGE_META_SELECTOR: w0.metaSelector,
     WA_MESSAGE_META_ATTR: w0.metaAttr,
     WA_MESSAGE_TEXT_SELECTOR: w0.messageTextSelector,
-    WA_MESSAGE_OUTGOING_PREFIX: allTrue ? "true_" : allFalse ? "false_" : outP,
+    WA_MESSAGE_OUTGOING_INDICATOR: "div.message-out",
     WA_INPUT_BOX_SELECTOR: composer.inputSelector,
     WA_SEND_BUTTON_SELECTOR: composer.sendSelector,
     WA_CHAT_UNREAD_BADGE_SELECTOR: FALLBACK_UNREAD_BADGE,
