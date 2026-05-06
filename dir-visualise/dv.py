@@ -115,21 +115,50 @@ def mode_string(mode: int) -> str:
     return t + perms
 
 
-def long_format(e: Entry, args: argparse.Namespace) -> str:
-    """Format entry like `ls -l`: mode links owner group size mtime."""
+def owner_name(uid: int) -> str:
     try:
         import pwd
-        owner = pwd.getpwuid(e.uid).pw_name
+        return pwd.getpwuid(uid).pw_name
     except (ImportError, KeyError):
-        owner = str(e.uid)
+        return str(uid)
+
+
+def group_name(gid: int) -> str:
     try:
         import grp
-        group = grp.getgrgid(e.gid).gr_name
+        return grp.getgrgid(gid).gr_name
     except (ImportError, KeyError):
-        group = str(e.gid)
-    size = human_size(e.size) if args.human else str(e.size)
+        return str(gid)
+
+
+def size_str(e: Entry, args: argparse.Namespace) -> str:
+    return human_size(e.size) if args.human else str(e.size)
+
+
+@dataclass
+class LongWidths:
+    nlink: int = 0
+    owner: int = 0
+    group: int = 0
+    size: int = 0
+
+
+def long_format(e: Entry, args: argparse.Namespace, widths: LongWidths | None = None) -> str:
+    """Format entry like `ls -l`: mode links owner group size mtime."""
+    w = widths or LongWidths()
+    owner = owner_name(e.uid)
+    group = group_name(e.gid)
+    size = size_str(e, args)
+    nlink_w = max(w.nlink, 2)
+    owner_w = max(w.owner, len(owner))
+    group_w = max(w.group, len(group))
+    size_w = max(w.size, 7)
     mtime = time.strftime("%b %e %H:%M", time.localtime(e.mtime))
-    return f"{mode_string(e.mode)} {e.nlink:>2} {owner} {group} {size:>7} {mtime}  "
+    return (
+        f"{mode_string(e.mode)} {e.nlink:>{nlink_w}} "
+        f"{owner:<{owner_w}} {group:<{group_w}} "
+        f"{size:>{size_w}} {mtime}  "
+    )
 
 
 def classifier(e: Entry, args: argparse.Namespace) -> str:
@@ -161,34 +190,61 @@ def display_name(e: Entry, args: argparse.Namespace) -> str:
     return name
 
 
-def render_line(e: Entry, prefix: str, connector: str, args: argparse.Namespace) -> str:
-    meta = long_format(e, args) if args.long else ""
+def render_line(
+    e: Entry,
+    prefix: str,
+    connector: str,
+    args: argparse.Namespace,
+    widths: LongWidths | None = None,
+) -> str:
+    meta = long_format(e, args, widths) if args.long else ""
     return f"{meta}{prefix}{connector}{display_name(e, args)}"
 
 
-def walk(directory: Path, prefix: str, args: argparse.Namespace, depth: int) -> tuple[int, int]:
+def walk(
+    directory: Path, prefix: str, args: argparse.Namespace, depth: int
+) -> tuple[list[tuple[Entry, str, str]], int, int]:
+    """Collect (entry, prefix, connector) tuples for every line, plus counts.
+
+    Rendering happens in a second pass so columns can be width-aligned across
+    the whole tree.
+    """
     if args.max_depth is not None and depth > args.max_depth:
-        return 0, 0
+        return [], 0, 0
 
     entries = list_dir(directory, args)
+    nodes: list[tuple[Entry, str, str]] = []
     dir_count = 0
     file_count = 0
 
     for i, e in enumerate(entries):
         is_last = i == len(entries) - 1
         connector = LAST_BRANCH if is_last else BRANCH
-        print(render_line(e, prefix, connector, args))
+        nodes.append((e, prefix, connector))
 
         if e.is_dir and not e.is_link:
             dir_count += 1
             extension = SPACE if is_last else PIPE
-            sub_dirs, sub_files = walk(e.path, prefix + extension, args, depth + 1)
+            sub_nodes, sub_dirs, sub_files = walk(e.path, prefix + extension, args, depth + 1)
+            nodes.extend(sub_nodes)
             dir_count += sub_dirs
             file_count += sub_files
         else:
             file_count += 1
 
-    return dir_count, file_count
+    return nodes, dir_count, file_count
+
+
+def compute_long_widths(
+    nodes: list[tuple[Entry, str, str]], args: argparse.Namespace
+) -> LongWidths:
+    w = LongWidths()
+    for e, _, _ in nodes:
+        w.nlink = max(w.nlink, len(str(e.nlink)))
+        w.owner = max(w.owner, len(owner_name(e.uid)))
+        w.group = max(w.group, len(group_name(e.gid)))
+        w.size = max(w.size, len(size_str(e, args)))
+    return w
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -237,6 +293,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+
+    if args.directory in (".", "./"):
+        args.directory = os.getcwd()
+
     root = Path(args.directory)
 
     if not root.exists():
@@ -251,13 +311,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"dv: cannot stat '{root}'", file=sys.stderr)
             return 1
         e = Entry(**{**e.__dict__, "name": str(root)})
-        print(render_line(e, prefix="", connector="", args=args))
+        widths = compute_long_widths([(e, "", "")], args) if args.long else None
+        print(render_line(e, prefix="", connector="", args=args, widths=widths))
         print("\n" * 2, end="")
         return 0
 
     header = str(root) + classifier(stat_entry(root), args) if args.classify or args.slash else str(root)
     print(header)
-    dirs, files = walk(root, "", args, depth=1)
+    nodes, dirs, files = walk(root, "", args, depth=1)
+    widths = compute_long_widths(nodes, args) if args.long else None
+    for e, prefix, connector in nodes:
+        print(render_line(e, prefix, connector, args, widths))
     print(f"\n{dirs} director{'y' if dirs == 1 else 'ies'}, {files} file{'' if files == 1 else 's'}")
     print("\n" * 2, end="")
     return 0
