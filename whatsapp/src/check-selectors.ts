@@ -171,6 +171,33 @@ async function hintMessageWrapper(page: Page, sels: Sels): Promise<string> {
       lines.push("  data-id=\\"" + id + "\\" class=\\"" + cls + "\\" .message-out=" + hasOut + " .message-in=" + hasIn);
     });
     if (dataIds.length > 10) lines.push("  ... and " + (dataIds.length - 10) + " more");
+
+    lines.push("");
+    lines.push("Deep inspection of first 3 [data-id] elements — all data-testid, role, and class names on descendants:");
+    dataIds.slice(0, 3).forEach((el, idx) => {
+      const id = (el.getAttribute("data-id") || "").slice(0, 20);
+      lines.push("  --- [data-id=\\"" + id + "...\\"] ---");
+      const descs = Array.from(el.querySelectorAll("*")).slice(0, 40);
+      const seen = new Set();
+      descs.forEach(d => {
+        const tag = d.tagName.toLowerCase();
+        const tid = d.getAttribute("data-testid") || "";
+        const role = d.getAttribute("role") || "";
+        const cls = (d.getAttribute("class") || "").split(/\\s+/).filter(Boolean);
+        const interesting = cls.filter(c => /^[a-z]/.test(c) && !c.startsWith("x") && !c.startsWith("_"));
+        if (tid || role || interesting.length) {
+          const key = tag + tid + role + interesting.join(",");
+          if (!seen.has(key)) {
+            seen.add(key);
+            let info = "    <" + tag + ">";
+            if (tid) info += " data-testid=\\"" + tid + "\\"";
+            if (role) info += " role=\\"" + role + "\\"";
+            if (interesting.length) info += " classes=[" + interesting.join(", ") + "]";
+            lines.push(info);
+          }
+        }
+      });
+    });
     return lines.join("\\n");
     `,
   );

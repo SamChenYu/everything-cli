@@ -16,9 +16,9 @@ WA_CHAT_ROW_SELECTOR=div[role="row"]
 WA_CHAT_UNREAD_BADGE_SELECTOR=span[aria-label*="unread message"]
 
 # Message wrapper (every text/media message in #main has data-id and contains a
-# .message-in or .message-out descendant; system rows like the encryption
-# notice or group-profile card don't, so :has() filters them out)
-WA_MESSAGE_WRAPPER_SELECTOR="#main div[data-id]:has(div.message-in, div.message-out)"
+# msg-container descendant; system rows like the encryption notice or
+# group-profile card don't, so :has() filters them out)
+WA_MESSAGE_WRAPPER_SELECTOR='#main div[data-id]:has([data-testid="msg-container"])'
 
 # Metadata element inside a message (present on text messages, absent on media-only)
 WA_MESSAGE_META_SELECTOR=[data-pre-plain-text]
@@ -30,9 +30,9 @@ WA_MESSAGE_META_ATTR=data-pre-plain-text
 WA_MESSAGE_TEXT_SELECTOR=[data-testid="selectable-text"]
 
 # Selector that matches outgoing messages only (relative to a wrapper).
-# WhatsApp marks outgoing bubbles with a `message-out` class on a descendant
+# WhatsApp marks outgoing bubbles with a `tail-out` data-testid on a descendant
 # of the wrapper. Direction is detected by `wrapper.locator(this).count() > 0`.
-WA_MESSAGE_OUTGOING_INDICATOR=div.message-out
+WA_MESSAGE_OUTGOING_INDICATOR='[data-testid="tail-out"]'
 
 # QR code selector
 WA_QR_CODE_SELECTOR=[data-testid="qrcode"]
