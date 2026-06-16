@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import stat
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -51,6 +52,52 @@ def stat_entry(path: Path) -> Entry | None:
     )
 
 
+def find_git_root(path: Path) -> Path | None:
+    current = path.resolve()
+    while True:
+        if (current / ".git").exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
+def get_gitignored(directory: Path, entries: list[Entry], git_root: Path) -> set[str]:
+    if not entries:
+        return set()
+
+    input_lines = []
+    for e in entries:
+        try:
+            rel = str((directory / e.name).resolve().relative_to(git_root))
+        except ValueError:
+            continue
+        if e.is_dir:
+            rel += "/"
+        input_lines.append((e.name, rel))
+
+    if not input_lines:
+        return set()
+
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "--stdin"],
+            input="\n".join(rel for _, rel in input_lines),
+            capture_output=True,
+            text=True,
+            cwd=str(git_root),
+        )
+    except (FileNotFoundError, OSError):
+        return set()
+
+    if not result.stdout:
+        return set()
+
+    ignored_rels = set(result.stdout.strip().splitlines())
+    return {name for name, rel in input_lines if rel in ignored_rels}
+
+
 def list_dir(directory: Path, args: argparse.Namespace) -> list[Entry]:
     try:
         names = os.listdir(directory)
@@ -66,6 +113,10 @@ def list_dir(directory: Path, args: argparse.Namespace) -> list[Entry]:
         e = stat_entry(directory / name)
         if e is not None:
             entries.append(e)
+
+    if not args.no_gitignore and args.git_root is not None:
+        ignored = get_gitignored(directory, entries, args.git_root)
+        entries = [e for e in entries if e.name not in ignored]
 
     if args.sort_size:
         entries.sort(key=lambda e: (-e.size, e.name.lower()))
@@ -276,6 +327,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="recurse into subdirectories; optional N caps depth (e.g. -R 2)",
     )
     p.add_argument("-L", "--max-depth", type=int, default=None, help="alias for -R N")
+    p.add_argument("-I", "--no-gitignore", action="store_true", help="show files ignored by .gitignore (hidden by default)")
     p.add_argument("--help", action="help", help="show this help message and exit")
     args = p.parse_args(argv)
 
@@ -298,6 +350,7 @@ def main(argv: list[str] | None = None) -> int:
         args.directory = os.getcwd()
 
     root = Path(args.directory)
+    args.git_root = None if args.no_gitignore else find_git_root(root)
 
     if not root.exists():
         print(f"dv: '{root}' does not exist", file=sys.stderr)
