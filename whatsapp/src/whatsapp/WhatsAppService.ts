@@ -31,6 +31,7 @@ const TIMEOUTS = {
   MESSAGE_LOAD: 15_000,
   TEXT_CONTENT: 1_000,
   POST_TYPE_SETTLE: 300,
+  DIALOG_DISMISS: 2_000,
 } as const;
 
 const TYPE_DELAY_MS = 30;
@@ -242,6 +243,41 @@ export class WhatsAppService {
     return chats;
   }
 
+  /**
+   * WhatsApp Web intermittently overlays a modal dialog (promos, "what's new"
+   * cards, notification prompts) that is `aria-modal="true"` and swallows all
+   * pointer events, so chat-row / composer clicks time out with
+   * "…<div role='dialog' aria-modal='true'>… intercepts pointer events".
+   *
+   * This is best-effort: press Escape first (no affirmative side effect), and
+   * only if the dialog is still there fall back to its explicit Close control.
+   * We deliberately avoid clicking arbitrary dialog buttons, since those can
+   * confirm an unintended action.
+   */
+  private async dismissBlockingDialog(): Promise<void> {
+    if (!this.page) return;
+
+    const dialog = this.page.locator('[role="dialog"][aria-modal="true"]');
+    if ((await dialog.count().catch(() => 0)) === 0) return;
+
+    await this.page.keyboard.press("Escape").catch(() => {});
+    const gone = await dialog
+      .first()
+      .waitFor({ state: "hidden", timeout: TIMEOUTS.DIALOG_DISMISS })
+      .then(() => true)
+      .catch(() => false);
+    if (gone) return;
+
+    const closeBtn = dialog.locator('[aria-label="Close"]').first();
+    if (await closeBtn.isVisible().catch(() => false)) {
+      await closeBtn.click().catch(() => {});
+      await dialog
+        .first()
+        .waitFor({ state: "hidden", timeout: TIMEOUTS.DIALOG_DISMISS })
+        .catch(() => {});
+    }
+  }
+
   async openChat(chatTitle: string): Promise<void> {
     if (!this.page) {
       throw new Error("Browser not launched");
@@ -272,6 +308,7 @@ export class WhatsAppService {
       throw new Error(`Chat "${chatTitle}" not found`);
     }
 
+    await this.dismissBlockingDialog();
     await item.click();
 
     if (hadMessages && oldFirstId) {
@@ -369,6 +406,8 @@ export class WhatsAppService {
     if (!this.page) {
       throw new Error("Browser not launched");
     }
+
+    await this.dismissBlockingDialog();
 
     const inputBox = this.page.locator(SELECTORS.INPUT_BOX);
     await inputBox.click();
