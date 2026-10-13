@@ -108,11 +108,20 @@ export default function App() {
     }
 
     if (stage === "selecting_chat") {
-      if (key.upArrow) {
+      if (char === "k") {
+        // vim: up
         setSelectedChatIndex((prev) => Math.max(0, prev - 1));
-      } else if (key.downArrow) {
+      } else if (char === "j") {
+        // vim: down
         setSelectedChatIndex((prev) => Math.min(chats.length - 1, prev + 1));
-      } else if (key.return) {
+      } else if (char === "g") {
+        // vim: jump to top
+        setSelectedChatIndex(0);
+      } else if (char === "G") {
+        // vim: jump to bottom
+        setSelectedChatIndex(Math.max(0, chats.length - 1));
+      } else if (char === "l" || key.return) {
+        // vim: enter/open
         const chat = chats[selectedChatIndex];
         if (chat) {
           selectChat(chat);
@@ -125,11 +134,20 @@ export default function App() {
         }
       }
     } else if (stage === "selecting_topic") {
-      if (key.upArrow) {
+      if (char === "k") {
+        // vim: up
         setSelectedTopicIndex((prev) => Math.max(0, prev - 1));
-      } else if (key.downArrow) {
+      } else if (char === "j") {
+        // vim: down
         setSelectedTopicIndex((prev) => Math.min(topics.length - 1, prev + 1));
-      } else if (key.return) {
+      } else if (char === "g") {
+        // vim: jump to top
+        setSelectedTopicIndex(0);
+      } else if (char === "G") {
+        // vim: jump to bottom
+        setSelectedTopicIndex(Math.max(0, topics.length - 1));
+      } else if (char === "l" || key.return) {
+        // vim: enter/open
         const topic = topics[selectedTopicIndex];
         if (topic) {
           loadMessages(selectedChat!, topic);
@@ -140,27 +158,29 @@ export default function App() {
         if (topic) {
           loadMessages(selectedChat!, topic);
         }
-      } else if (key.escape) {
+      } else if (char === "h" || key.escape) {
+        // vim: back out
         setSelectedChat(null);
         setTopics([]);
         setSelectedTopicIndex(0);
         setStage("selecting_chat");
       }
     } else if (stage === "viewing_messages") {
-      if (key.return) {
-        if (input.trim() === ":q") {
-          telegram?.unsubscribeFromNewMessages();
-          setMessages([]);
-          setInput("");
-          if (selectedTopic) {
-            setSelectedTopic(null);
-            setSelectedTopicIndex(0);
-            setStage("selecting_topic");
-          } else {
-            setSelectedChat(null);
-            setStage("selecting_chat");
-          }
-        } else if (input.trim() !== "") {
+      if (key.escape) {
+        // vim: leave the chat (replaces the old ':q' command)
+        telegram?.unsubscribeFromNewMessages();
+        setMessages([]);
+        setInput("");
+        if (selectedTopic) {
+          setSelectedTopic(null);
+          setSelectedTopicIndex(0);
+          setStage("selecting_topic");
+        } else {
+          setSelectedChat(null);
+          setStage("selecting_chat");
+        }
+      } else if (key.return) {
+        if (input.trim() !== "") {
           // Send message
           sendMessage(input);
         }
@@ -266,7 +286,7 @@ export default function App() {
     return (
       <Box flexDirection="column">
         <Text color="green" bold>
-          Select a chat (use arrow keys or press 1-9, 0 for 10):
+          Select a chat (j/k to move, l/Enter to open, 1-9/0 to jump):
         </Text>
         <Text> </Text>
         {chats.map((chat, index) => (
@@ -279,7 +299,7 @@ export default function App() {
           </Box>
         ))}
         <Text> </Text>
-        <Text color="green">Press Enter to select, Ctrl+C to exit</Text>
+        <Text color="green">j/k move · l/Enter open · g/G top/bottom · 1-9/0 jump · Ctrl+C exit</Text>
       </Box>
     );
   }
@@ -296,7 +316,7 @@ export default function App() {
     return (
       <Box flexDirection="column">
         <Text color="green" bold>
-          {selectedChat?.title} — Select a topic (use arrow keys or press 1-9, 0 for 10):
+          {selectedChat?.title} — Select a topic (j/k to move, l/Enter to open, h to go back):
         </Text>
         <Text> </Text>
         {topics.map((topic, index) => (
@@ -310,7 +330,7 @@ export default function App() {
           </Box>
         ))}
         <Text> </Text>
-        <Text color="green">Press Enter to select, Esc to go back, Ctrl+C to exit</Text>
+        <Text color="green">j/k move · l/Enter open · h/Esc back · g/G top/bottom · 1-9/0 jump · Ctrl+C exit</Text>
       </Box>
     );
   }
@@ -349,7 +369,7 @@ export default function App() {
           </Text>
         </Box>
         <Text> </Text>
-        <Text color="green">Type to compose, Enter to send, ':q' + Enter to go back, Ctrl+C to exit</Text>
+        <Text color="green">Type to compose · Enter to send · Esc to go back · Ctrl+C to exit</Text>
       </Box>
     );
   }
