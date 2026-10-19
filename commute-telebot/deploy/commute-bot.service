@@ -1,0 +1,17 @@
+[Unit]
+Description=TfL commute Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Paths/user match a default Ubuntu EC2 clone into the home dir.
+# Adjust if you cloned elsewhere or use a different user.
+User=ubuntu
+WorkingDirectory=/home/ubuntu/commute-telebot
+ExecStart=/home/ubuntu/commute-telebot/venv/bin/python -m commute_bot.bot
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

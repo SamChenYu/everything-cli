@@ -1,0 +1,48 @@
+# Commute bot config. Copy to config.yaml (config.yaml is gitignored).
+# Re-verify stop ids any time with:
+#   python -m commute_bot.find_stops "Stepney Green"
+#   python -m commute_bot.find_stops --arrivals <stop_id> --line 205
+
+timezone: Europe/London
+windows:
+  morning:
+    title: "🌅 Morning commute"
+    days: [mon, tue, wed, thu, fri]
+    start: "08:00"
+    end: "08:30"
+    every_minutes: 5
+    watches:
+      # 205 westbound at Stepney Green -> Paddington (passes Marble Arch)
+      - kind: bus
+        label: "Stepney Green → Marble Arch"
+        stop_id: "490000220W2"
+        line: "205"
+        destination_contains: "Paddington"
+        max_results: 3
+      - kind: tube
+        label: "Hammersmith & City (westbound)"
+        line: "hammersmith-city"
+        stop_id: "940GZZLUSGN"      # Stepney Green tube
+        direction: "Westbound"
+        max_results: 3
+
+  evening:
+    title: "🌆 Evening commute"
+    days: [mon, tue, wed, thu, fri]
+    start: "17:00"
+    end: "17:30"
+    every_minutes: 5
+    watches:
+      # 205 eastbound at Liverpool Street -> Bow Church
+      - kind: bus
+        label: "Liverpool Street → Bow Church"
+        stop_id: "490000138L"
+        line: "205"
+        destination_contains: "Bow Church"
+        max_results: 3
+      - kind: tube
+        label: "Hammersmith & City (eastbound)"
+        line: "hammersmith-city"
+        stop_id: "940GZZLULVT"      # Liverpool Street tube
+        direction: "Eastbound"
+        max_results: 3
